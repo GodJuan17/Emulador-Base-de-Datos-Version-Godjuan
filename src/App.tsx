@@ -48,6 +48,25 @@ export function App() {
     setRelationAttributes(current => ({ ...current, [relationId]: draft.attributes ?? [] }));
     return true;
   };
+  const editRelation = (id: string, changes: { kind?: RelationDraft["kind"]; mandatory?: boolean }): boolean => {
+    const relation = model.relations.find(item => item.id === id);
+    const match = id.match(/^fk:([^:]+):(.+)$/);
+    if (!relation || !match || relation.kind === "N:M") return false;
+    const [, ownerName, fkColumns] = match;
+    const owner = tables.find(table => table.name.toLowerCase() === ownerName);
+    if (!owner) return false;
+    const columns = fkColumns.split(",");
+    const foreignKey = owner.foreignKeys.find(item => item.columns.map(column => column.toLowerCase()).join(",") === fkColumns);
+    if (!foreignKey) return false;
+    const uniqueKeys = owner.uniqueKeys.filter(key => key.map(column => column.toLowerCase()).join(",") !== columns.join(","));
+    const nextKind = changes.kind ?? relation.kind;
+    if (nextKind === "1:1") uniqueKeys.push(foreignKey.columns);
+    const dependency = changes.mandatory === undefined ? foreignKey.dependency : changes.mandatory ? "E" : undefined;
+    const nextColumns = owner.columns.map(column => foreignKey.columns.some(name => name.toLowerCase() === column.name.toLowerCase()) ? { ...column, ...(changes.mandatory !== undefined ? { nullable: !changes.mandatory } : {}), ...(column.foreignKey ? { foreignKey: { ...column.foreignKey, dependency } } : {}) } : column);
+    const foreignKeys = owner.foreignKeys.map(item => item === foreignKey ? { ...item, dependency } : item);
+    setTables(tables.map(table => table.name.toLowerCase() === ownerName ? { ...table, columns: nextColumns, uniqueKeys, foreignKeys } : table));
+    return true;
+  };
   const renameEntity = (oldName: string, newName: string): boolean => {
     const nextName = newName.trim();
     if (!nextName || (nextName.toLowerCase() !== oldName.toLowerCase() && tables.some(table => table.name.toLowerCase() === nextName.toLowerCase()))) return false;
@@ -116,7 +135,7 @@ export function App() {
   };
   return <main className="app"><header className="topbar"><div className="brand-mark">P</div><div><p className="eyebrow">DATABASE EMULATOR</p><h1>Diseña tu modelo de datos</h1></div></header>
     <section className="workspace design-workspace"><aside className="editor design-editor"><Designer tables={tables} onChange={setTables} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} requestHierarchy={() => setHierarchyRequest(value => value + 1)} requestArrange={() => setArrangeRequest(value => value + 1)} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute}/></aside>
-      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} minimum={minimum} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section></section>
+      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} minimum={minimum} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} editRelation={editRelation} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section></section>
     <section className={`warnings ${model.warnings.length ? "warning-state" : "clear-state"}`}><div className="warning-heading"><span className="warning-icon">{model.warnings.length ? "!" : "✓"}</span><div><h2>Advertencias <span>{model.warnings.length}</span></h2><p>{model.warnings.length ? "Revisa estos elementos que no se pudieron inferir por completo." : "Sin advertencias. El DDL reconocido se representó correctamente."}</p></div></div>{model.warnings.length > 0 && <ul>{model.warnings.map((warning, i) => <li key={`${i}-${warning}`}>{warning}</li>)}</ul>}</section>
     <footer className="page-foot">Usa las herramientas del panel lateral para agregar entidades, interrelaciones y jerarquías. Desplaza el canvas arrastrando el fondo y acércate con la rueda del mouse. El modelo se guarda automáticamente en este navegador.</footer>
   </main>;

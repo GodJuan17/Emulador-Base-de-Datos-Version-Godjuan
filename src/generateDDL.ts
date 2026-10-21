@@ -1,6 +1,7 @@
 import type { CheckConstraint, Table } from "./parser/ddlParser";
 
-function quote(identifier: string): string { return `"${identifier.replace(/"/g, '""')}"`; }
+const reservedWords = new Set("all analyse analyze and any array as asc asymmetric authorization binary both case cast check collate column constraint create current_user default deferrable desc distinct do else end except false fetch for foreign from grant group having in initially intersect into lateral leading limit localtime localtimestamp new not null offset old on only or order placing primary references returning select session_user some symmetric table then to trailing true union unique user using variadic when where window with".split(" "));
+function quote(identifier: string): string { return /^[a-z_][a-z0-9_$]*$/.test(identifier) && !reservedWords.has(identifier.toLowerCase()) ? identifier : `"${identifier.replace(/"/g, '""')}"`; }
 function uniqueName(base: string, used: Set<string>): string { let name = base; let suffix = 2; while (used.has(name.toLowerCase())) name = `${base}_${suffix++}`; used.add(name.toLowerCase()); return name; }
 function checkColumns(table: Table, check: CheckConstraint): string[] {
   if (check.columns?.length) return check.columns;

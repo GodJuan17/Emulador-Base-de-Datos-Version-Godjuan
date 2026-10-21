@@ -63,3 +63,7 @@
 .designer-modal .attribute-classifications summary{padding:2px 0 5px}
 .designer-modal .domain-draft{margin-top:6px}
 .designer-modal .add-draft-attribute,.designer-modal>footer button{font-size:12px}
+
+.primary-key-draft{display:grid;gap:9px;padding:12px;border:1px solid #e2eaec;border-radius:9px;background:#fbfcfc}.primary-key-draft .form-field{font-size:11px}
+
+.arrange-model{display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;border-color:#cbdde2;background:#eaf3f5;font-size:12px;font-weight:700}.arrange-model:hover{border-color:#86aab6;background:#e0eef1}

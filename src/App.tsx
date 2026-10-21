@@ -7,7 +7,7 @@ import type { Column, ForeignKey, Table } from "./parser/ddlParser";
 import type { AttributeMark, RelationDraft } from "./model";
 import { usePersistentState } from "./persistence";
 export function App() {
-  const [tables, setTables] = usePersistentState<Table[]>("sima.modelador.tables.v1", []); const [tab, setTab] = usePersistentState<"conceptual" | "logical" | "ddl">("sima.modelador.tab.v1", "conceptual"); const minimum = 1; const [names, setNames] = usePersistentState<Record<string, string>>("sima.modelador.relation-names.v1", {}); const [attributeMarks, setAttributeMarks] = usePersistentState<Record<string, AttributeMark>>("sima.modelador.attribute-marks.v1", {}); const [domains, setDomains] = usePersistentState<Record<string, string>>("sima.modelador.domains.v1", {}); const [relationAttributes, setRelationAttributes] = usePersistentState<Record<string, string[]>>("sima.modelador.relation-attributes.v1", {}); const [hierarchyRequest, setHierarchyRequest] = useState(0); const [arrangeRequest, setArrangeRequest] = useState(0);
+  const [tables, setTables] = usePersistentState<Table[]>("sima.modelador.tables.v1", []); const [tab, setTab] = usePersistentState<"conceptual" | "logical" | "ddl">("sima.modelador.tab.v1", "conceptual"); const [names, setNames] = usePersistentState<Record<string, string>>("sima.modelador.relation-names.v1", {}); const [cardinalityMinimums, setCardinalityMinimums] = usePersistentState<Record<string, (0 | 1)[]>>("sima.modelador.cardinality-minimums.v1", {}); const [attributeMarks, setAttributeMarks] = usePersistentState<Record<string, AttributeMark>>("sima.modelador.attribute-marks.v1", {}); const [domains, setDomains] = usePersistentState<Record<string, string>>("sima.modelador.domains.v1", {}); const [relationAttributes, setRelationAttributes] = usePersistentState<Record<string, string[]>>("sima.modelador.relation-attributes.v1", {}); const [hierarchyRequest, setHierarchyRequest] = useState(0); const [arrangeRequest, setArrangeRequest] = useState(0);
   const model = useMemo(() => toDiagram({ tables, warnings: [] }), [tables]);
   const outputDDL = useMemo(() => generateDDL(tables), [tables]);
   const createRelation = (draft: RelationDraft): boolean => {
@@ -27,6 +27,7 @@ export function App() {
       const extra = (draft.attributes ?? []).map(name => ({ name, type: "TEXT", nullable: true, primaryKey: false, unique: false }));
       if (new Set([...accumulated, ...extra].map(column => column.name.toLowerCase())).size !== accumulated.length + extra.length) return false;
       setTables([...tables, { name: relationName, columns: [...accumulated, ...extra], primaryKey: accumulated.map(column => column.name), uniqueKeys: [], foreignKeys, checks: [] }]);
+      if (draft.participantMinimums) setCardinalityMinimums(current => ({ ...current, [`assoc:${relationName.toLowerCase()}`]: draft.participantMinimums! }));
       return true;
     }
     if (draft.kind === "N:M") {
@@ -36,6 +37,7 @@ export function App() {
       const extra = (draft.attributes ?? []).map(name => ({ name, type: "TEXT", nullable: true, primaryKey: false, unique: false }));
       if (new Set([...columns, ...extra].map(column => column.name.toLowerCase())).size !== columns.length + extra.length) return false;
       setTables([...tables, { name: relationName, columns: [...columns, ...extra], primaryKey: columns.map(column => column.name), uniqueKeys: [], foreignKeys, checks: [] }]);
+      if (draft.participantMinimums) setCardinalityMinimums(current => ({ ...current, [`assoc:${relationName.toLowerCase()}`]: draft.participantMinimums! }));
       return true;
     }
     const owner = target; const referenced = source; const addition = columnsFor(owner, referenced, draft.mandatory);
@@ -45,14 +47,30 @@ export function App() {
     setTables(tables.map(table => table.name === owner.name ? nextTable : table));
     const relationId = `fk:${owner.name.toLowerCase()}:${addition.foreignKey.columns.join(",").toLowerCase()}`;
     setNames(current => ({ ...current, [relationId]: draft.name.trim() || `${referenced.name}_${owner.name}` }));
+    if (draft.participantMinimums) setCardinalityMinimums(current => ({ ...current, [relationId]: draft.participantMinimums! }));
     setRelationAttributes(current => ({ ...current, [relationId]: draft.attributes ?? [] }));
     return true;
   };
-  const editRelation = (id: string, changes: { kind?: RelationDraft["kind"]; mandatory?: boolean }): boolean => {
+  const editRelation = (id: string, changes: { kind?: RelationDraft["kind"]; mandatory?: boolean; weakCardinality?: import("./parser/ddlParser").WeakCardinality }): boolean => {
     const relation = model.relations.find(item => item.id === id);
     const match = id.match(/^fk:([^:]+):(.+)$/);
     if (!relation || !match || relation.kind === "N:M") return false;
     const [, ownerName, fkColumns] = match;
+    if (changes.weakCardinality && relation.dependency) {
+      const owner = tables.find(table => table.name.toLowerCase() === ownerName);
+      const foreignKey = owner?.foreignKeys.find(item => item.columns.map(column => column.toLowerCase()).join(",") === fkColumns);
+      if (!owner || !foreignKey) return false;
+      const identifying = foreignKey.dependency === "ID"; const maxOne = changes.weakCardinality.endsWith(":1");
+      const partialIdentifier = foreignKey.partialIdentifier ?? "id_local";
+      let columns = [...owner.columns];
+      if (identifying && !maxOne && !columns.some(column => column.name.toLowerCase() === partialIdentifier.toLowerCase())) columns.push({ name: partialIdentifier, type: "INTEGER", nullable: false, primaryKey: true, unique: false });
+      columns = columns.map(column => foreignKey.columns.some(name => name.toLowerCase() === column.name.toLowerCase()) ? { ...column, nullable: false, primaryKey: identifying } : column.name.toLowerCase() === partialIdentifier.toLowerCase() ? { ...column, nullable: false, primaryKey: identifying && !maxOne } : column);
+      const uniqueKeys = owner.uniqueKeys.filter(key => key.map(column => column.toLowerCase()).join(",") !== fkColumns);
+      if (!identifying && maxOne) uniqueKeys.push(foreignKey.columns);
+      const foreignKeys = owner.foreignKeys.map(item => item === foreignKey ? { ...item, weakCardinality: changes.weakCardinality, ...(identifying ? { partialIdentifier } : {}) } : item);
+      setTables(tables.map(table => table.name.toLowerCase() === ownerName ? { ...table, columns, primaryKey: columns.filter(column => column.primaryKey).map(column => column.name), uniqueKeys, foreignKeys } : table));
+      return true;
+    }
     const owner = tables.find(table => table.name.toLowerCase() === ownerName);
     if (!owner) return false;
     const columns = fkColumns.split(",");
@@ -135,15 +153,12 @@ export function App() {
   };
   return <main className="app"><header className="topbar"><div className="brand-mark">P</div><div><p className="eyebrow">DATABASE EMULATOR</p><h1>Diseña tu modelo de datos</h1></div></header>
     <section className="workspace design-workspace"><aside className="editor design-editor"><Designer tables={tables} onChange={setTables} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} requestHierarchy={() => setHierarchyRequest(value => value + 1)} requestArrange={() => setArrangeRequest(value => value + 1)} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute}/></aside>
-      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} minimum={minimum} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} editRelation={editRelation} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section></section>
-    <section className={`warnings ${model.warnings.length ? "warning-state" : "clear-state"}`}><div className="warning-heading"><span className="warning-icon">{model.warnings.length ? "!" : "✓"}</span><div><h2>Advertencias <span>{model.warnings.length}</span></h2><p>{model.warnings.length ? "Revisa estos elementos que no se pudieron inferir por completo." : "Sin advertencias. El DDL reconocido se representó correctamente."}</p></div></div>{model.warnings.length > 0 && <ul>{model.warnings.map((warning, i) => <li key={`${i}-${warning}`}>{warning}</li>)}</ul>}</section>
-    <footer className="page-foot">Usa las herramientas del panel lateral para agregar entidades, interrelaciones y jerarquías. Desplaza el canvas arrastrando el fondo y acércate con la rueda del mouse. El modelo se guarda automáticamente en este navegador.</footer>
+      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} cardinalityMinimums={cardinalityMinimums} setCardinalityMinimums={setCardinalityMinimums} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} editRelation={editRelation} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section></section>
   </main>;
 }
 
 function DDLPreview({ source }: { source: string }) {
   const [message, setMessage] = useState("");
   const copy = async () => { try { await navigator.clipboard.writeText(source); setMessage("DDL copiado"); } catch { setMessage("No se pudo copiar; selecciona el texto para copiarlo."); } };
-  const download = () => { const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([source], { type: "text/sql;charset=utf-8" })); link.download = "modelo.sql"; link.click(); window.setTimeout(() => URL.revokeObjectURL(link.href), 1000); };
-  return <section className="ddl-preview"><header><div><h2>DDL de PostgreSQL</h2><p>Generado a partir de las entidades y relaciones del modelo.</p></div><div><button type="button" onClick={() => void copy()}>Copiar</button><button type="button" onClick={download}>Descargar .sql</button></div></header><textarea readOnly aria-label="DDL generado" value={source} placeholder="Añade una entidad para generar el DDL."/><small>{message || "El DDL se actualiza automáticamente."}</small></section>;
+  return <section className="ddl-preview"><header><div><h2>DDL de PostgreSQL</h2><p>Generado a partir de las entidades y relaciones del modelo.</p></div><div><button type="button" onClick={() => void copy()}>Copiar</button></div></header><textarea readOnly aria-label="DDL generado" value={source} placeholder="Añade una entidad para generar el DDL."/><small>{message || "El DDL se actualiza automáticamente."}</small></section>;
 }

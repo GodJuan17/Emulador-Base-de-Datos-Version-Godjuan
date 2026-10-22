@@ -61,13 +61,12 @@ export function App() {
       const foreignKey = owner?.foreignKeys.find(item => item.columns.map(column => column.toLowerCase()).join(",") === fkColumns);
       if (!owner || !foreignKey) return false;
       const identifying = foreignKey.dependency === "ID"; const maxOne = changes.weakCardinality.endsWith(":1");
-      const partialIdentifier = foreignKey.partialIdentifier ?? "id_local";
-      let columns = [...owner.columns];
-      if (identifying && !maxOne && !columns.some(column => column.name.toLowerCase() === partialIdentifier.toLowerCase())) columns.push({ name: partialIdentifier, type: "INTEGER", nullable: false, primaryKey: true, unique: false });
-      columns = columns.map(column => foreignKey.columns.some(name => name.toLowerCase() === column.name.toLowerCase()) ? { ...column, nullable: false, primaryKey: identifying } : column.name.toLowerCase() === partialIdentifier.toLowerCase() ? { ...column, nullable: false, primaryKey: identifying && !maxOne } : column);
+      const partialIdentifier = foreignKey.partialIdentifier;
+      let columns = owner.columns.filter(column => !(identifying && partialIdentifier && column.name.toLowerCase() === partialIdentifier.toLowerCase()));
+      columns = columns.map(column => foreignKey.columns.some(name => name.toLowerCase() === column.name.toLowerCase()) ? { ...column, nullable: false, primaryKey: identifying } : column);
       const uniqueKeys = owner.uniqueKeys.filter(key => key.map(column => column.toLowerCase()).join(",") !== fkColumns);
       if (!identifying && maxOne) uniqueKeys.push(foreignKey.columns);
-      const foreignKeys = owner.foreignKeys.map(item => item === foreignKey ? { ...item, weakCardinality: changes.weakCardinality, ...(identifying ? { partialIdentifier } : {}) } : item);
+      const foreignKeys = owner.foreignKeys.map(item => { if (item !== foreignKey) return item; const next = { ...item, weakCardinality: changes.weakCardinality }; delete next.partialIdentifier; return next; });
       setTables(tables.map(table => table.name.toLowerCase() === ownerName ? { ...table, columns, primaryKey: columns.filter(column => column.primaryKey).map(column => column.name), uniqueKeys, foreignKeys } : table));
       return true;
     }
@@ -96,11 +95,14 @@ export function App() {
     return true;
   };
   const deleteEntity = (name: string) => {
-    const nextTables = tables.filter(table => table.name !== name).map(table => {
-      const removedFks = table.foreignKeys.filter(fk => fk.table.toLowerCase() === name.toLowerCase());
+    const removedNames = new Set([name.toLowerCase()]);
+    let found = true;
+    while (found) { found = false; for (const table of tables) if (!removedNames.has(table.name.toLowerCase()) && table.foreignKeys.some(fk => removedNames.has(fk.table.toLowerCase()) && Boolean(fk.weakCardinality) && (fk.dependency === "E" || fk.dependency === "ID"))) { removedNames.add(table.name.toLowerCase()); found = true; } }
+    const nextTables = tables.filter(table => !removedNames.has(table.name.toLowerCase())).map(table => {
+      const removedFks = table.foreignKeys.filter(fk => removedNames.has(fk.table.toLowerCase()));
       const removedColumns = new Set(removedFks.flatMap(fk => fk.columns.map(column => column.toLowerCase())));
-      const columns = table.columns.filter(column => !removedColumns.has(column.name.toLowerCase())).map(column => column.foreignKey?.table.toLowerCase() === name.toLowerCase() ? { ...column, foreignKey: undefined } : column);
-      return { ...table, columns, primaryKey: table.primaryKey.filter(column => columns.some(item => item.name.toLowerCase() === column.toLowerCase())), uniqueKeys: table.uniqueKeys.filter(key => key.every(column => columns.some(item => item.name.toLowerCase() === column.toLowerCase()))), foreignKeys: table.foreignKeys.filter(fk => fk.table.toLowerCase() !== name.toLowerCase()) };
+      const columns = table.columns.filter(column => !removedColumns.has(column.name.toLowerCase())).map(column => column.foreignKey && removedNames.has(column.foreignKey.table.toLowerCase()) ? { ...column, foreignKey: undefined } : column);
+      return { ...table, columns, primaryKey: table.primaryKey.filter(column => columns.some(item => item.name.toLowerCase() === column.toLowerCase())), uniqueKeys: table.uniqueKeys.filter(key => key.every(column => columns.some(item => item.name.toLowerCase() === column.toLowerCase()))), foreignKeys: table.foreignKeys.filter(fk => !removedNames.has(fk.table.toLowerCase())) };
     });
     setTables(nextTables);
     const validKeys = new Set(nextTables.flatMap(table => table.columns.map(column => `${table.name}.${column.name}`.toLowerCase())));
@@ -138,6 +140,7 @@ export function App() {
   };
   const deleteRelation = (id: string) => {
     const relation = model.relations.find(item => item.id === id); if (!relation) return;
+    if (relation.dependency && relation.weakCardinality) { deleteEntity(relation.right); setNames(current => { const next = { ...current }; delete next[id]; return next; }); setRelationAttributes(current => { const next = { ...current }; delete next[id]; return next; }); return; }
     if (relation.kind === "N:M") { setTables(tables.filter(table => table.name.toLowerCase() !== relation.name.toLowerCase())); const validKeys = new Set(tables.filter(table => table.name.toLowerCase() !== relation.name.toLowerCase()).flatMap(table => table.columns.map(column => `${table.name}.${column.name}`.toLowerCase()))); setAttributeMarks(Object.fromEntries(Object.entries(attributeMarks).filter(([key]) => validKeys.has(key.toLowerCase())))); setDomains(Object.fromEntries(Object.entries(domains).filter(([key]) => validKeys.has(key.toLowerCase())))); setNames(current => { const next = { ...current }; delete next[id]; return next; }); return; }
     const match = id.match(/^fk:([^:]+):(.+)$/); if (!match) return;
     const [, ownerName, fkColumns] = match;

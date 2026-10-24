@@ -1,203 +1,2370 @@
 import { useEffect, useState } from "react";
 import type { AttributeMark, RelationDraft } from "./model";
-import type { Column, DependencyMark, ForeignKey, Table, WeakCardinality } from "./parser/ddlParser";
+import type {
+  Column,
+  DependencyMark,
+  ForeignKey,
+  Table,
+  WeakCardinality,
+} from "./parser/ddlParser";
 
-type Props = { tables: Table[]; onChange: (tables: Table[]) => void; attributeMarks: Record<string, AttributeMark>; setAttributeMarks: (marks: Record<string, AttributeMark>) => void; domains: Record<string, string>; setDomains: (domains: Record<string, string>) => void; createRelation: (draft: RelationDraft) => boolean; requestHierarchy: () => void; requestArrange: () => void; renameEntity: (oldName: string, newName: string) => boolean; deleteEntity: (name: string) => void; addAttribute: (table: string) => string | null; editAttribute: (table: string, oldName: string, changes: Partial<Column>) => boolean; deleteAttribute: (table: string, name: string) => boolean; editRequest?: { entity: string; attribute?: string; token: number } | null; onEditRequestHandled?: (token: number) => void; onEntityRenamed?: (oldName: string, newName: string) => void };
-type DraftAttribute = { name: string; type: string; primaryKey: boolean; alternateKey: boolean; unique: boolean; required: boolean; kind: "simple" | AttributeMark["kind"]; parts: string; domain: string; originalName?: string };
-const emptyAttribute = (name = "") => ({ name, type: "TEXT", primaryKey: false, alternateKey: false, unique: false, required: false, kind: "simple" as const, parts: "", domain: "" });
-const keyColumns = (columns: Column[]) => columns.filter(column => column.primaryKey).map(column => column.name);
-const isAssociative = (table: Table) => table.foreignKeys.length >= 2 && table.primaryKey.length > 0 && table.primaryKey.every(key => table.foreignKeys.some(fk => fk.columns.some(column => column.toLowerCase() === key.toLowerCase())));
-const relationKindFromMaximums = (maximums: ("1"|"n")[]) => maximums[0] === "1" && maximums[1] === "1" ? "1:1" as const : maximums[0] === "n" && maximums[1] === "n" ? "N:M" as const : "1:N" as const;
+type Props = {
+  tables: Table[];
+  onChange: (tables: Table[]) => void;
+  attributeMarks: Record<string, AttributeMark>;
+  setAttributeMarks: (marks: Record<string, AttributeMark>) => void;
+  domains: Record<string, string>;
+  setDomains: (domains: Record<string, string>) => void;
+  createRelation: (draft: RelationDraft) => boolean;
+  requestHierarchy: () => void;
+  requestArrange: () => void;
+  renameEntity: (oldName: string, newName: string) => boolean;
+  deleteEntity: (name: string) => void;
+  addAttribute: (table: string) => string | null;
+  editAttribute: (table: string, oldName: string, changes: Partial<Column>) => boolean;
+  deleteAttribute: (table: string, name: string) => boolean;
+  editRequest?: { entity: string; attribute?: string; token: number } | null;
+  onEditRequestHandled?: (token: number) => void;
+  onEntityRenamed?: (oldName: string, newName: string) => void;
+};
+type DraftAttribute = {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  alternateKey: boolean;
+  unique: boolean;
+  required: boolean;
+  kind: "simple" | AttributeMark["kind"];
+  parts: string;
+  domain: string;
+  originalName?: string;
+};
+const emptyAttribute = (name = "") => ({
+  name,
+  type: "TEXT",
+  primaryKey: false,
+  alternateKey: false,
+  unique: false,
+  required: false,
+  kind: "simple" as const,
+  parts: "",
+  domain: "",
+});
+const keyColumns = (columns: Column[]) =>
+  columns.filter((column) => column.primaryKey).map((column) => column.name);
+const isAssociative = (table: Table) =>
+  table.foreignKeys.length >= 2 &&
+  table.primaryKey.length > 0 &&
+  table.primaryKey.every((key) =>
+    table.foreignKeys.some((fk) =>
+      fk.columns.some((column) => column.toLowerCase() === key.toLowerCase()),
+    ),
+  );
+const relationKindFromMaximums = (maximums: ("1" | "n")[]) =>
+  maximums[0] === "1" && maximums[1] === "1"
+    ? ("1:1" as const)
+    : maximums[0] === "n" && maximums[1] === "n"
+      ? ("N:M" as const)
+      : ("1:N" as const);
 
-function EntityDraftPreview({ entityName, setEntityName, attributes, selectedAttribute, onEditAttribute }: { entityName: string; setEntityName: (name: string) => void; attributes: DraftAttribute[]; selectedAttribute: number | null; onEditAttribute: (index:number)=>void }) {
-  const cx=400, cy=220, rx=280, ry=150, halfWidth=96, halfHeight=32;
-  return <section className="entity-live-preview" aria-label="Vista previa en vivo del modelo conceptual"><div className="entity-preview-diagram"><svg viewBox="0 0 800 460" role="img" aria-label="Rectángulo de entidad con atributos alrededor"><defs><marker id="draft-multivalued-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="#6d8791"/></marker></defs>{attributes.map((attribute,index)=>{const angle=-Math.PI/2+2*Math.PI*index/Math.max(attributes.length,1);const dx=Math.cos(angle),dy=Math.sin(angle),x=cx+dx*rx,y=cy+dy*ry;const edgeDistance=Math.min(Math.abs(dx)>0.001?halfWidth/Math.abs(dx):Infinity,Math.abs(dy)>0.001?halfHeight/Math.abs(dy):Infinity);const x1=cx+dx*edgeDistance,y1=cy+dy*edgeDistance;const anchor=dx>0.35?"start":dx<-.35?"end":"middle";const labelX=x+dx*17,labelY=y+dy*17+(dy<-.35?-2:dy>.35?10:4);const composite=attribute.kind==="composite"||attribute.kind==="multivalued-composite",derived=attribute.kind==="derived",optional=!attribute.required||attribute.kind==="optional";const children=composite?[-1,0,1].map(offset=>({x:x+dx*34-dy*offset*17,y:y+dy*34+dx*offset*17})):[];const domain=attribute.domain.trim(),domainRx=Math.max(25,domain.length*3.8),domainX=(x1+x)/2,domainY=(y1+y)/2;return <g key={attribute.name+"-"+index} className={selectedAttribute===index?"draft-preview-selected":"draft-preview-selectable"} onClick={()=>onEditAttribute(index)} role="button" tabIndex={0} aria-label={"Editar atributo "+(attribute.name||"sin nombre")} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")onEditAttribute(index);}}><line x1={x1} y1={y1} x2={x} y2={y} className={optional?"draft-preview-edge optional":"draft-preview-edge"} markerEnd={attribute.kind==="multivalued"||attribute.kind==="multivalued-composite"?"url(#draft-multivalued-arrow)":undefined}/>{children.map((child,i)=><g key={i}><line x1={x} y1={y} x2={child.x} y2={child.y} className="draft-preview-edge"/><circle cx={child.x} cy={child.y} r="4" className="draft-preview-node"/></g>)}{selectedAttribute===index&&<path d={"M"+(x-12)+" "+(y-6)+"v-6h6 M"+(x+6)+" "+(y-12)+"h6v6 M"+(x+12)+" "+(y+6)+"v6h-6 M"+(x-6)+" "+(y+12)+"h-6v-6"} className="draft-preview-selection-reticle"/>}{attribute.primaryKey?<circle cx={x} cy={y} r="7" className="draft-preview-node primary"/>:attribute.alternateKey?<><path d={"M"+x+" "+(y-7)+" A7 7 0 0 0 "+x+" "+(y+7)+" Z"} className="draft-preview-half"/><circle cx={x} cy={y} r="7" className="draft-preview-node outline"/></>:<circle cx={x} cy={y} r="7" className={derived?"draft-preview-node derived":"draft-preview-node"}/>}{attribute.unique&&!attribute.primaryKey&&<circle cx={x} cy={y} r="10" className="draft-preview-unique"/>}<text x={labelX} y={labelY} textAnchor={anchor} className="draft-preview-label">{(attribute.name||"atributo").slice(0,18)}</text>{domain&&<g className="draft-preview-domain"><ellipse cx={domainX} cy={domainY} rx={domainRx} ry="13" className="domain-oval"/><text x={domainX} y={domainY+3} textAnchor="middle" className="domain-label">{domain}</text></g>}</g>;})}<rect x={cx-halfWidth} y={cy-halfHeight} width={halfWidth*2} height={halfHeight*2} rx="4" className="draft-preview-entity"/><path d={"M"+(cx+halfWidth)+" "+(cy-halfHeight)+"v"+(halfHeight*2)+"h"+(-halfWidth*2)} className="draft-preview-entity-emphasis"/></svg><input className="entity-preview-name" aria-label="Nombre de la entidad" value={entityName} onChange={event=>setEntityName(event.target.value)} placeholder="Nombre de la entidad"/></div></section>;
+function EntityDraftPreview({
+  entityName,
+  setEntityName,
+  attributes,
+  selectedAttribute,
+  onEditAttribute,
+}: {
+  entityName: string;
+  setEntityName: (name: string) => void;
+  attributes: DraftAttribute[];
+  selectedAttribute: number | null;
+  onEditAttribute: (index: number) => void;
+}) {
+  const cx = 400,
+    cy = 220,
+    rx = 280,
+    ry = 150,
+    halfWidth = 96,
+    halfHeight = 32;
+  return (
+    <section
+      className="entity-live-preview"
+      aria-label="Vista previa en vivo del modelo conceptual"
+    >
+      <div className="entity-preview-diagram">
+        <svg
+          viewBox="0 0 800 460"
+          role="img"
+          aria-label="Rectángulo de entidad con atributos alrededor"
+        >
+          <defs>
+            <marker
+              id="draft-multivalued-arrow"
+              markerWidth="9"
+              markerHeight="9"
+              refX="8"
+              refY="4.5"
+              orient="auto"
+            >
+              <path d="M0 0L9 4.5L0 9z" fill="#6d8791" />
+            </marker>
+          </defs>
+          {attributes.map((attribute, index) => {
+            const angle = -Math.PI / 2 + (2 * Math.PI * index) / Math.max(attributes.length, 1);
+            const dx = Math.cos(angle),
+              dy = Math.sin(angle),
+              x = cx + dx * rx,
+              y = cy + dy * ry;
+            const edgeDistance = Math.min(
+              Math.abs(dx) > 0.001 ? halfWidth / Math.abs(dx) : Infinity,
+              Math.abs(dy) > 0.001 ? halfHeight / Math.abs(dy) : Infinity,
+            );
+            const x1 = cx + dx * edgeDistance,
+              y1 = cy + dy * edgeDistance;
+            const anchor = dx > 0.35 ? "start" : dx < -0.35 ? "end" : "middle";
+            const labelX = x + dx * 17,
+              labelY = y + dy * 17 + (dy < -0.35 ? -2 : dy > 0.35 ? 10 : 4);
+            const composite =
+                attribute.kind === "composite" || attribute.kind === "multivalued-composite",
+              derived = attribute.kind === "derived",
+              optional = !attribute.required || attribute.kind === "optional";
+            const children = composite
+              ? [-1, 0, 1].map((offset) => ({
+                  x: x + dx * 34 - dy * offset * 17,
+                  y: y + dy * 34 + dx * offset * 17,
+                }))
+              : [];
+            const domain = attribute.domain.trim(),
+              domainRx = Math.max(25, domain.length * 3.8),
+              domainX = (x1 + x) / 2,
+              domainY = (y1 + y) / 2;
+            return (
+              <g
+                key={attribute.name + "-" + index}
+                className={
+                  selectedAttribute === index
+                    ? "draft-preview-selected"
+                    : "draft-preview-selectable"
+                }
+                onClick={() => onEditAttribute(index)}
+                role="button"
+                tabIndex={0}
+                aria-label={"Editar atributo " + (attribute.name || "sin nombre")}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") onEditAttribute(index);
+                }}
+              >
+                <line
+                  x1={x1}
+                  y1={y1}
+                  x2={x}
+                  y2={y}
+                  className={optional ? "draft-preview-edge optional" : "draft-preview-edge"}
+                  markerEnd={
+                    attribute.kind === "multivalued" || attribute.kind === "multivalued-composite"
+                      ? "url(#draft-multivalued-arrow)"
+                      : undefined
+                  }
+                />
+                {children.map((child, i) => (
+                  <g key={i}>
+                    <line x1={x} y1={y} x2={child.x} y2={child.y} className="draft-preview-edge" />
+                    <circle cx={child.x} cy={child.y} r="4" className="draft-preview-node" />
+                  </g>
+                ))}
+                {selectedAttribute === index && (
+                  <path
+                    d={
+                      "M" +
+                      (x - 12) +
+                      " " +
+                      (y - 6) +
+                      "v-6h6 M" +
+                      (x + 6) +
+                      " " +
+                      (y - 12) +
+                      "h6v6 M" +
+                      (x + 12) +
+                      " " +
+                      (y + 6) +
+                      "v6h-6 M" +
+                      (x - 6) +
+                      " " +
+                      (y + 12) +
+                      "h-6v-6"
+                    }
+                    className="draft-preview-selection-reticle"
+                  />
+                )}
+                {attribute.primaryKey ? (
+                  <circle cx={x} cy={y} r="7" className="draft-preview-node primary" />
+                ) : attribute.alternateKey ? (
+                  <>
+                    <path
+                      d={"M" + x + " " + (y - 7) + " A7 7 0 0 0 " + x + " " + (y + 7) + " Z"}
+                      className="draft-preview-half"
+                    />
+                    <circle cx={x} cy={y} r="7" className="draft-preview-node outline" />
+                  </>
+                ) : (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r="7"
+                    className={derived ? "draft-preview-node derived" : "draft-preview-node"}
+                  />
+                )}
+                {attribute.unique && !attribute.primaryKey && (
+                  <circle cx={x} cy={y} r="10" className="draft-preview-unique" />
+                )}
+                <text x={labelX} y={labelY} textAnchor={anchor} className="draft-preview-label">
+                  {(attribute.name || "atributo").slice(0, 18)}
+                </text>
+                {domain && (
+                  <g className="draft-preview-domain">
+                    <ellipse
+                      cx={domainX}
+                      cy={domainY}
+                      rx={domainRx}
+                      ry="13"
+                      className="domain-oval"
+                    />
+                    <text x={domainX} y={domainY + 3} textAnchor="middle" className="domain-label">
+                      {domain}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+          <rect
+            x={cx - halfWidth}
+            y={cy - halfHeight}
+            width={halfWidth * 2}
+            height={halfHeight * 2}
+            rx="4"
+            className="draft-preview-entity"
+          />
+          <path
+            d={
+              "M" +
+              (cx + halfWidth) +
+              " " +
+              (cy - halfHeight) +
+              "v" +
+              halfHeight * 2 +
+              "h" +
+              -halfWidth * 2
+            }
+            className="draft-preview-entity-emphasis"
+          />
+        </svg>
+        <input
+          className="entity-preview-name"
+          aria-label="Nombre de la entidad"
+          value={entityName}
+          onChange={(event) => setEntityName(event.target.value)}
+          placeholder="Nombre de la entidad"
+        />
+      </div>
+    </section>
+  );
 }
 
 type RelationMode = "binary" | "recursive" | "nary";
-const relationModes: { id: RelationMode; label: string }[] = [{ id: "binary", label: "Dos entidades" }, { id: "recursive", label: "Recursiva" }, { id: "nary", label: "Más de dos" }];
-const naryPositions: [number, number][][] = [[[25, 16], [75, 16], [50, 86]], [[25, 16], [75, 16], [25, 86], [75, 86]]];
+const relationModes: { id: RelationMode; label: string }[] = [
+  { id: "binary", label: "Dos entidades" },
+  { id: "recursive", label: "Recursiva" },
+  { id: "nary", label: "Más de dos" },
+];
+const naryPositions: [number, number][][] = [
+  [
+    [25, 16],
+    [75, 16],
+    [50, 86],
+  ],
+  [
+    [25, 16],
+    [75, 16],
+    [25, 86],
+    [75, 86],
+  ],
+];
 
-function RelationDraftPreview({ mode, onMode, source, target, additional, name, setName, attributes, minimums, maximums, setCardinality, setSource, setTarget, setAdditional, addParticipant, removeParticipant, roles, setRole, entities }: { mode: RelationMode; onMode: (mode: RelationMode) => void; source: string; target: string; additional: string[]; name: string; setName: (name: string) => void; attributes: string[]; minimums: (0|1)[]; maximums: ("1"|"n")[]; setCardinality: (index:number,min:0|1,max:"1"|"n")=>void; setSource:(value:string)=>void; setTarget:(value:string)=>void; setAdditional:(index:number,value:string)=>void; addParticipant:()=>void; removeParticipant:(index:number)=>void; roles:[string,string]; setRole:(index:0|1,value:string)=>void; entities:string[] }) {
-  const [open,setOpen]=useState<string|null>(null); const [search,setSearch]=useState(""); const [editingName,setEditingName]=useState(false); const [nameDraft,setNameDraft]=useState(name);
-  useEffect(()=>setNameDraft(name),[name]);
-  const participants=[source,target,...additional];
-  const recursive=mode==="recursive";
-  const ratio=mode==="nary"?"N-aria":(maximums[0]??"1").toUpperCase()+":"+(maximums[1]??"n").toUpperCase();
-  const choose=(index:number)=>{
-    const key="p"+index; const value=participants[index];
-    const options=entities.filter(item=>item.toLocaleLowerCase().includes(search.toLocaleLowerCase())&&(recursive||!participants.some((other,i)=>i!==index&&other&&other.toLocaleLowerCase()===item.toLocaleLowerCase())));
-    const pick=(item:string)=>{if(recursive){setSource(item);setTarget(item);}else if(index===0)setSource(item);else if(index===1)setTarget(item);else setAdditional(index-2,item);setOpen(null);};
-    return <div className="relation-picker-wrap"><button type="button" className="relation-entity-picker" aria-expanded={open===key} onClick={()=>{setSearch("");setOpen(open===key?null:key);}}>{value||"Elegir entidad"}<span>⌄</span></button>{open===key&&<div className="relation-popover"><input autoFocus className="relation-search" aria-label="Buscar entidad" placeholder="Buscar entidad…" value={search} onChange={event=>setSearch(event.target.value)}/><div className="relation-entity-options">{options.map(item=><button type="button" key={item} onClick={()=>pick(item)}>{item}</button>)}{options.length===0&&<small>No se encontraron entidades</small>}</div></div>}</div>;
+function RelationDraftPreview({
+  mode,
+  onMode,
+  source,
+  target,
+  additional,
+  name,
+  setName,
+  attributes,
+  minimums,
+  maximums,
+  setCardinality,
+  setSource,
+  setTarget,
+  setAdditional,
+  addParticipant,
+  removeParticipant,
+  roles,
+  setRole,
+  entities,
+}: {
+  mode: RelationMode;
+  onMode: (mode: RelationMode) => void;
+  source: string;
+  target: string;
+  additional: string[];
+  name: string;
+  setName: (name: string) => void;
+  attributes: string[];
+  minimums: (0 | 1)[];
+  maximums: ("1" | "n")[];
+  setCardinality: (index: number, min: 0 | 1, max: "1" | "n") => void;
+  setSource: (value: string) => void;
+  setTarget: (value: string) => void;
+  setAdditional: (index: number, value: string) => void;
+  addParticipant: () => void;
+  removeParticipant: (index: number) => void;
+  roles: [string, string];
+  setRole: (index: 0 | 1, value: string) => void;
+  entities: string[];
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(name);
+  useEffect(() => setNameDraft(name), [name]);
+  const participants = [source, target, ...additional];
+  const recursive = mode === "recursive";
+  const ratio =
+    mode === "nary"
+      ? "N-aria"
+      : (maximums[0] ?? "1").toUpperCase() + ":" + (maximums[1] ?? "n").toUpperCase();
+  const choose = (index: number) => {
+    const key = "p" + index;
+    const value = participants[index];
+    const options = entities.filter(
+      (item) =>
+        item.toLocaleLowerCase().includes(search.toLocaleLowerCase()) &&
+        (recursive ||
+          !participants.some(
+            (other, i) =>
+              i !== index && other && other.toLocaleLowerCase() === item.toLocaleLowerCase(),
+          )),
+    );
+    const pick = (item: string) => {
+      if (recursive) {
+        setSource(item);
+        setTarget(item);
+      } else if (index === 0) setSource(item);
+      else if (index === 1) setTarget(item);
+      else setAdditional(index - 2, item);
+      setOpen(null);
+    };
+    return (
+      <div className="relation-picker-wrap">
+        <button
+          type="button"
+          className="relation-entity-picker"
+          aria-expanded={open === key}
+          onClick={() => {
+            setSearch("");
+            setOpen(open === key ? null : key);
+          }}
+        >
+          {value || "Elegir entidad"}
+          <span>⌄</span>
+        </button>
+        {open === key && (
+          <div className="relation-popover">
+            <input
+              autoFocus
+              className="relation-search"
+              aria-label="Buscar entidad"
+              placeholder="Buscar entidad…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <div className="relation-entity-options">
+              {options.map((item) => (
+                <button type="button" key={item} onClick={() => pick(item)}>
+                  {item}
+                </button>
+              ))}
+              {options.length === 0 && <small>No se encontraron entidades</small>}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
-  const cardinality=(index:number)=>{
-    const key="c"+index; const max=maximums[index]??"n";
-    const options:readonly (readonly [0|1,"1"|"n"])[]=index<2?[[0,"1"],[1,"1"],[0,"n"],[1,"n"]]:[[0,"n"],[1,"n"]];
-    return <div className="relation-cardinality-wrap"><button type="button" className="relation-cardinality-button" aria-expanded={open===key} onClick={()=>setOpen(open===key?null:key)}>{"("+(minimums[index]??0)+","+max.toUpperCase()+")"}</button>{open===key&&<div className="relation-popover cardinality-popover" role="group" aria-label={"Cardinalidad del participante "+(index+1)}>{options.map(([min,maxValue])=><button type="button" className={minimums[index]===min&&max===maxValue?"active":""} key={""+min+maxValue} onClick={()=>{setCardinality(index,min,maxValue);setOpen(null);}}>{"("+min+","+maxValue.toUpperCase()+")"}</button>)}</div>}</div>;
+  const cardinality = (index: number) => {
+    const key = "c" + index;
+    const max = maximums[index] ?? "n";
+    const options: readonly (readonly [0 | 1, "1" | "n"])[] =
+      index < 2
+        ? [
+            [0, "1"],
+            [1, "1"],
+            [0, "n"],
+            [1, "n"],
+          ]
+        : [
+            [0, "n"],
+            [1, "n"],
+          ];
+    return (
+      <div className="relation-cardinality-wrap">
+        <button
+          type="button"
+          className="relation-cardinality-button"
+          aria-expanded={open === key}
+          onClick={() => setOpen(open === key ? null : key)}
+        >
+          {"(" + (minimums[index] ?? 0) + "," + max.toUpperCase() + ")"}
+        </button>
+        {open === key && (
+          <div
+            className="relation-popover cardinality-popover"
+            role="group"
+            aria-label={"Cardinalidad del participante " + (index + 1)}
+          >
+            {options.map(([min, maxValue]) => (
+              <button
+                type="button"
+                className={minimums[index] === min && max === maxValue ? "active" : ""}
+                key={"" + min + maxValue}
+                onClick={() => {
+                  setCardinality(index, min, maxValue);
+                  setOpen(null);
+                }}
+              >
+                {"(" + min + "," + maxValue.toUpperCase() + ")"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
-  const diamond=<div className="relation-diamond-wrap"><span className="relation-kind-badge">{ratio}</span><div className="relation-diamond"><span className="relation-diamond-text">{editingName?<input autoFocus aria-label="Nombre de la interrelación" value={nameDraft} placeholder="tiene" onChange={event=>setNameDraft(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();setName(nameDraft.trim());setEditingName(false);}if(event.key==="Escape"){setNameDraft(name);setEditingName(false);}}} onBlur={()=>setEditingName(false)}/>:<button type="button" aria-label="Editar nombre de la interrelación" onClick={()=>setEditingName(true)}>{name||<span className="relation-name-placeholder">tiene</span>}</button>}</span></div></div>;
-  const spots=naryPositions[Math.min(Math.max(additional.length,1),2)-1];
-  const canAdd=additional.length<2&&entities.length>=additional.length+3;
-  return <section className="entity-live-preview relationship-preview relation-preview-editor"><header className="relation-preview-heading"><h4>Vista previa</h4><div className="relation-mode-switch" role="group" aria-label="Tipo de interrelación">{relationModes.map(item=><button type="button" key={item.id} aria-pressed={mode===item.id} disabled={item.id==="nary"&&entities.length<3} title={item.id==="nary"&&entities.length<3?"Necesitas al menos tres entidades":undefined} onClick={()=>{setOpen(null);setSearch("");onMode(item.id);}}>{item.label}</button>)}</div></header>
-    {mode==="nary"
-      ?<div className="relation-nary-preview"><div className="relation-nary-stage"><svg className="relation-nary-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{spots.map(([x,y],i)=><line key={i} x1="50" y1="50" x2={x} y2={y} className="draft-preview-edge" vectorEffect="non-scaling-stroke"/>)}</svg>{spots.map(([x,y],i)=><div key={i} className={"relation-nary-node "+(y<50?"top":"bottom")} style={{left:x+"%",top:y+"%",zIndex:open==="p"+i||open==="c"+i?6:2}}>{choose(i)}{cardinality(i)}{i>=3&&<button type="button" className="relation-nary-remove" aria-label="Quitar participante" onClick={()=>removeParticipant(i-2)}>×</button>}</div>)}{diamond}</div>{canAdd&&<button type="button" className="add-draft-attribute" onClick={addParticipant}>＋ Añadir participante ({additional.length+3} entidades)</button>}</div>
-      :recursive
-      ?<div className="relation-recursive-layout"><div className="relation-recursive-stage"><div className="recursive-entity">{choose(0)}</div><div className="recursive-card top">{cardinality(0)}</div><div className="recursive-card bottom">{cardinality(1)}</div>{diamond}</div></div>
-      :<div className="relation-binary-layout"><div className="relation-end-preview"><small>Desde</small>{choose(0)}{cardinality(0)}</div>{diamond}<div className="relation-end-preview"><small>Hasta</small>{choose(1)}{cardinality(1)}</div></div>}
-    {mode==="binary"&&<button type="button" className="relation-swap-button" aria-label="Intercambiar Desde y Hasta" title="Intercambiar Desde y Hasta" onClick={()=>{setSource(target);setTarget(source);setCardinality(0,minimums[1]??0,maximums[1]??"n");setCardinality(1,minimums[0]??1,maximums[0]??"1");setRole(0,roles[1]);setRole(1,roles[0]);}}>⇄</button>}
-    {attributes.map((attribute,index)=>{const x=350+index*50;return <svg key={attribute+index} className="relation-attribute-svg" viewBox="0 0 800 65" aria-hidden="true"><line x1="400" y1="0" x2={x} y2="24" className="draft-preview-edge"/><circle cx={x} cy="42" r="18" className="draft-preview-node"/><text x={x} y="64" textAnchor="middle" className="draft-preview-label">{attribute.slice(0,14)}</text></svg>;})}</section>;
+  const diamond = (
+    <div className="relation-diamond-wrap">
+      <span className="relation-kind-badge">{ratio}</span>
+      <div className="relation-diamond">
+        <span className="relation-diamond-text">
+          {editingName ? (
+            <input
+              autoFocus
+              aria-label="Nombre de la interrelación"
+              value={nameDraft}
+              placeholder="tiene"
+              onChange={(event) => setNameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  setName(nameDraft.trim());
+                  setEditingName(false);
+                }
+                if (event.key === "Escape") {
+                  setNameDraft(name);
+                  setEditingName(false);
+                }
+              }}
+              onBlur={() => setEditingName(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              aria-label="Editar nombre de la interrelación"
+              onClick={() => setEditingName(true)}
+            >
+              {name || <span className="relation-name-placeholder">tiene</span>}
+            </button>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+  const spots = naryPositions[Math.min(Math.max(additional.length, 1), 2) - 1];
+  const canAdd = additional.length < 2 && entities.length >= additional.length + 3;
+  return (
+    <section className="entity-live-preview relationship-preview relation-preview-editor">
+      <header className="relation-preview-heading">
+        <h4>Vista previa</h4>
+        <div className="relation-mode-switch" role="group" aria-label="Tipo de interrelación">
+          {relationModes.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              aria-pressed={mode === item.id}
+              disabled={item.id === "nary" && entities.length < 3}
+              title={
+                item.id === "nary" && entities.length < 3
+                  ? "Necesitas al menos tres entidades"
+                  : undefined
+              }
+              onClick={() => {
+                setOpen(null);
+                setSearch("");
+                onMode(item.id);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </header>
+      {mode === "nary" ? (
+        <div className="relation-nary-preview">
+          <div className="relation-nary-stage">
+            <svg
+              className="relation-nary-lines"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              {spots.map(([x, y], i) => (
+                <line
+                  key={i}
+                  x1="50"
+                  y1="50"
+                  x2={x}
+                  y2={y}
+                  className="draft-preview-edge"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+            {spots.map(([x, y], i) => (
+              <div
+                key={i}
+                className={"relation-nary-node " + (y < 50 ? "top" : "bottom")}
+                style={{
+                  left: x + "%",
+                  top: y + "%",
+                  zIndex: open === "p" + i || open === "c" + i ? 6 : 2,
+                }}
+              >
+                {choose(i)}
+                {cardinality(i)}
+                {i >= 3 && (
+                  <button
+                    type="button"
+                    className="relation-nary-remove"
+                    aria-label="Quitar participante"
+                    onClick={() => removeParticipant(i - 2)}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {diamond}
+          </div>
+          {canAdd && (
+            <button type="button" className="add-draft-attribute" onClick={addParticipant}>
+              ＋ Añadir participante ({additional.length + 3} entidades)
+            </button>
+          )}
+        </div>
+      ) : recursive ? (
+        <div className="relation-recursive-layout">
+          <div className="relation-recursive-stage">
+            <div className="recursive-entity">{choose(0)}</div>
+            <div className="recursive-card top">{cardinality(0)}</div>
+            <div className="recursive-card bottom">{cardinality(1)}</div>
+            {diamond}
+          </div>
+        </div>
+      ) : (
+        <div className="relation-binary-layout">
+          <div className="relation-end-preview">
+            <small>Desde</small>
+            {choose(0)}
+            {cardinality(0)}
+          </div>
+          {diamond}
+          <div className="relation-end-preview">
+            <small>Hasta</small>
+            {choose(1)}
+            {cardinality(1)}
+          </div>
+        </div>
+      )}
+      {mode === "binary" && (
+        <button
+          type="button"
+          className="relation-swap-button"
+          aria-label="Intercambiar Desde y Hasta"
+          title="Intercambiar Desde y Hasta"
+          onClick={() => {
+            setSource(target);
+            setTarget(source);
+            setCardinality(0, minimums[1] ?? 0, maximums[1] ?? "n");
+            setCardinality(1, minimums[0] ?? 1, maximums[0] ?? "1");
+            setRole(0, roles[1]);
+            setRole(1, roles[0]);
+          }}
+        >
+          ⇄
+        </button>
+      )}
+      {attributes.map((attribute, index) => {
+        const x = 350 + index * 50;
+        return (
+          <svg
+            key={attribute + index}
+            className="relation-attribute-svg"
+            viewBox="0 0 800 65"
+            aria-hidden="true"
+          >
+            <line x1="400" y1="0" x2={x} y2="24" className="draft-preview-edge" />
+            <circle cx={x} cy="42" r="18" className="draft-preview-node" />
+            <text x={x} y="64" textAnchor="middle" className="draft-preview-label">
+              {attribute.slice(0, 14)}
+            </text>
+          </svg>
+        );
+      })}
+    </section>
+  );
 }
 
-function WeakEntityDraftPreview({ parent, name, relationName, dependency, cardinality, identifier, attributes }: { parent: string; name: string; relationName: string; dependency: DependencyMark; cardinality: WeakCardinality; identifier: string; attributes: string[] }) {
-  return <section className="entity-live-preview relationship-preview"><h4>Vista previa</h4><svg viewBox="0 0 800 460" role="img" aria-label="Vista previa de entidad débil y su relación"><line x1="230" y1="220" x2="330" y2="220" className="draft-preview-edge"/><line x1="470" y1="220" x2="570" y2="220" className="draft-preview-edge"/><rect x="110" y="190" width="120" height="60" rx="4" className="draft-preview-entity"/><rect x="570" y="190" width="120" height="60" rx="4" className="draft-preview-entity"/><rect x="576" y="196" width="108" height="48" rx="3" className="draft-preview-entity-emphasis"/><text x="170" y="222" textAnchor="middle" dominantBaseline="middle" className="draft-preview-label">{parent||"Entidad fuerte"}</text><text x="630" y="222" textAnchor="middle" dominantBaseline="middle" className="draft-preview-label">{name||"Entidad débil"}</text><polygon points="400,150 470,220 400,290 330,220" className="draft-preview-entity"/><line x1="365" y1="185" x2="435" y2="185" className="draft-preview-edge"/><text x="400" y="178" textAnchor="middle" className="draft-preview-label">{dependency==="ID"?"ID":"EX"}</text><text x="400" y="226" textAnchor="middle" className="draft-preview-label">{relationName||"Relación"}</text><text x="400" y="132" textAnchor="middle" className="draft-preview-label">1:N</text><text x="278" y="207" textAnchor="middle" className="draft-preview-label">(1,1)</text><text x="522" y="207" textAnchor="middle" className="draft-preview-label">({cardinality.replace(":",",").toLowerCase()})</text><circle cx="630" cy="278" r="6" className="draft-preview-node primary"/><text x="630" y="305" textAnchor="middle" className="draft-preview-label">{dependency==="E"?identifier:"PK heredada"}</text>{attributes.slice(0,3).map((attribute,index)=><g key={attribute+index}><line x1="630" y1="250" x2={545+index*85} y2="348" className="draft-preview-edge"/><circle cx={545+index*85} cy="365" r="24" className="draft-preview-node"/><text x={545+index*85} y="401" textAnchor="middle" className="draft-preview-label">{attribute.slice(0,12)}</text></g>)}</svg></section>;
+function WeakEntityDraftPreview({
+  parent,
+  name,
+  relationName,
+  dependency,
+  cardinality,
+  identifier,
+  attributes,
+}: {
+  parent: string;
+  name: string;
+  relationName: string;
+  dependency: DependencyMark;
+  cardinality: WeakCardinality;
+  identifier: string;
+  attributes: string[];
+}) {
+  return (
+    <section className="entity-live-preview relationship-preview">
+      <h4>Vista previa</h4>
+      <svg
+        viewBox="0 0 800 460"
+        role="img"
+        aria-label="Vista previa de entidad débil y su relación"
+      >
+        <line x1="230" y1="220" x2="330" y2="220" className="draft-preview-edge" />
+        <line x1="470" y1="220" x2="570" y2="220" className="draft-preview-edge" />
+        <rect x="110" y="190" width="120" height="60" rx="4" className="draft-preview-entity" />
+        <rect x="570" y="190" width="120" height="60" rx="4" className="draft-preview-entity" />
+        <rect
+          x="576"
+          y="196"
+          width="108"
+          height="48"
+          rx="3"
+          className="draft-preview-entity-emphasis"
+        />
+        <text
+          x="170"
+          y="222"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="draft-preview-label"
+        >
+          {parent || "Entidad fuerte"}
+        </text>
+        <text
+          x="630"
+          y="222"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="draft-preview-label"
+        >
+          {name || "Entidad débil"}
+        </text>
+        <polygon points="400,150 470,220 400,290 330,220" className="draft-preview-entity" />
+        <line x1="365" y1="185" x2="435" y2="185" className="draft-preview-edge" />
+        <text x="400" y="178" textAnchor="middle" className="draft-preview-label">
+          {dependency === "ID" ? "ID" : "EX"}
+        </text>
+        <text x="400" y="226" textAnchor="middle" className="draft-preview-label">
+          {relationName || "Relación"}
+        </text>
+        <text x="400" y="132" textAnchor="middle" className="draft-preview-label">
+          1:N
+        </text>
+        <text x="278" y="207" textAnchor="middle" className="draft-preview-label">
+          (1,1)
+        </text>
+        <text x="522" y="207" textAnchor="middle" className="draft-preview-label">
+          ({cardinality.replace(":", ",").toLowerCase()})
+        </text>
+        <circle cx="630" cy="278" r="6" className="draft-preview-node primary" />
+        <text x="630" y="305" textAnchor="middle" className="draft-preview-label">
+          {dependency === "E" ? identifier : "PK heredada"}
+        </text>
+        {attributes.slice(0, 3).map((attribute, index) => (
+          <g key={attribute + index}>
+            <line x1="630" y1="250" x2={545 + index * 85} y2="348" className="draft-preview-edge" />
+            <circle cx={545 + index * 85} cy="365" r="24" className="draft-preview-node" />
+            <text x={545 + index * 85} y="401" textAnchor="middle" className="draft-preview-label">
+              {attribute.slice(0, 12)}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </section>
+  );
 }
 
-export function Designer({ tables, onChange, attributeMarks, setAttributeMarks, domains, setDomains, createRelation, requestHierarchy, requestArrange, renameEntity, deleteEntity, addAttribute, editAttribute, deleteAttribute, editRequest, onEditRequestHandled, onEntityRenamed }: Props) {
-  const hierarchyEntityCount = tables.filter(table => !isAssociative(table)).length;
+export function Designer({
+  tables,
+  onChange,
+  attributeMarks,
+  setAttributeMarks,
+  domains,
+  setDomains,
+  createRelation,
+  requestHierarchy,
+  requestArrange,
+  renameEntity,
+  deleteEntity,
+  addAttribute,
+  editAttribute,
+  deleteAttribute,
+  editRequest,
+  onEditRequestHandled,
+  onEntityRenamed,
+}: Props) {
+  const hierarchyEntityCount = tables.filter((table) => !isAssociative(table)).length;
   const [dialog, setDialog] = useState<"entity" | "weak" | "relation" | null>(null);
   const [entityName, setEntityName] = useState("");
-  const [attributes, setAttributes] = useState<DraftAttribute[]>([{ ...emptyAttribute("id"), type: "INTEGER", primaryKey: true, required: true }]);
+  const [attributes, setAttributes] = useState<DraftAttribute[]>([
+    { ...emptyAttribute("id"), type: "INTEGER", primaryKey: true, required: true },
+  ]);
   const [selectedDraftAttribute, setSelectedDraftAttribute] = useState<number | null>(null);
   const [editingDraftAttribute, setEditingDraftAttribute] = useState(false);
-  const [relation, setRelation] = useState({ source: "", target: "", additional: [] as string[], minimums: [1, 0] as (0 | 1)[], maximums: ["1", "n"] as ("1"|"n")[], name: "tiene", kind: "1:N" as RelationDraft["kind"], mandatory: false, attributes: [] as string[], roles: ["", ""] as [string,string] });
+  const [relation, setRelation] = useState({
+    source: "",
+    target: "",
+    additional: [] as string[],
+    minimums: [1, 0] as (0 | 1)[],
+    maximums: ["1", "n"] as ("1" | "n")[],
+    name: "tiene",
+    kind: "1:N" as RelationDraft["kind"],
+    mandatory: false,
+    attributes: [] as string[],
+    roles: ["", ""] as [string, string],
+  });
   const [relationMode, setRelationMode] = useState<RelationMode>("binary");
-  const [weakDraft, setWeakDraft] = useState({ name: "", parent: "", dependency: "ID" as DependencyMark, cardinality: "0:N" as WeakCardinality, identifier: "id", relationName: "", attributes: "" });
+  const [weakDraft, setWeakDraft] = useState({
+    name: "",
+    parent: "",
+    dependency: "ID" as DependencyMark,
+    cardinality: "0:N" as WeakCardinality,
+    identifier: "id",
+    relationName: "",
+    attributes: "",
+  });
   const [weakAttributes, setWeakAttributes] = useState<DraftAttribute[]>([]);
   const [error, setError] = useState("");
   const [editingEntityName, setEditingEntityName] = useState<string | null>(null);
-  const [entityMenu, setEntityMenu] = useState<string | null>(null); const [entityNameDraft, setEntityNameDraft] = useState(""); const [attributeMenu, setAttributeMenu] = useState<{entity:string; name:string} | null>(null); const [attributeDraft, setAttributeDraft] = useState<Column | null>(null); const [menuError, setMenuError] = useState("");
+  const [entityMenu, setEntityMenu] = useState<string | null>(null);
+  const [entityNameDraft, setEntityNameDraft] = useState("");
+  const [attributeMenu, setAttributeMenu] = useState<{ entity: string; name: string } | null>(null);
+  const [attributeDraft, setAttributeDraft] = useState<Column | null>(null);
+  const [menuError, setMenuError] = useState("");
 
-  const openEntity = () => { setEditingEntityName(null); setEntityName(`entidad_${tables.length + 1}`); setAttributes([{ ...emptyAttribute("id"), type: "INTEGER", primaryKey: true, required: true }]); setSelectedDraftAttribute(null); setEditingDraftAttribute(false); setError(""); setDialog("entity"); };
+  const openEntity = () => {
+    setEditingEntityName(null);
+    setEntityName(`entidad_${tables.length + 1}`);
+    setAttributes([{ ...emptyAttribute("id"), type: "INTEGER", primaryKey: true, required: true }]);
+    setSelectedDraftAttribute(null);
+    setEditingDraftAttribute(false);
+    setError("");
+    setDialog("entity");
+  };
   useEffect(() => {
     if (!editRequest) return;
-    const table = tables.find(item => item.name === editRequest.entity);
-    if (!table) { onEditRequestHandled?.(editRequest.token); return; }
-    const draft = table.columns.map(column => {
+    const table = tables.find((item) => item.name === editRequest.entity);
+    if (!table) {
+      onEditRequestHandled?.(editRequest.token);
+      return;
+    }
+    const draft = table.columns.map((column) => {
       const mark = attributeMarks[`${table.name}.${column.name}`];
-      return { name: column.name, originalName: column.name, type: column.type, primaryKey: column.primaryKey, alternateKey: Boolean(column.alternateKey), unique: column.unique, required: !column.nullable, kind: mark?.kind ?? "simple", parts: mark?.parts.join(", ") ?? "", domain: domains[`${table.name}.${column.name}`] ?? "" } as DraftAttribute;
+      return {
+        name: column.name,
+        originalName: column.name,
+        type: column.type,
+        primaryKey: column.primaryKey,
+        alternateKey: Boolean(column.alternateKey),
+        unique: column.unique,
+        required: !column.nullable,
+        kind: mark?.kind ?? "simple",
+        parts: mark?.parts.join(", ") ?? "",
+        domain: domains[`${table.name}.${column.name}`] ?? "",
+      } as DraftAttribute;
     });
-    const selectedIndex = editRequest.attribute ? draft.findIndex(attribute => attribute.originalName?.toLowerCase() === editRequest.attribute?.toLowerCase()) : -1;
-    setEditingEntityName(table.name); setEntityName(table.name); setAttributes(draft); setSelectedDraftAttribute(selectedIndex >= 0 ? selectedIndex : null); setEditingDraftAttribute(selectedIndex >= 0); setError(""); setDialog("entity"); onEditRequestHandled?.(editRequest.token);
+    const selectedIndex = editRequest.attribute
+      ? draft.findIndex(
+          (attribute) =>
+            attribute.originalName?.toLowerCase() === editRequest.attribute?.toLowerCase(),
+        )
+      : -1;
+    setEditingEntityName(table.name);
+    setEntityName(table.name);
+    setAttributes(draft);
+    setSelectedDraftAttribute(selectedIndex >= 0 ? selectedIndex : null);
+    setEditingDraftAttribute(selectedIndex >= 0);
+    setError("");
+    setDialog("entity");
+    onEditRequestHandled?.(editRequest.token);
   }, [editRequest?.token]);
-  const openRelation = () => { setRelationMode("binary"); setRelation({ source: "", target: "", additional: [], minimums: [1, 0], maximums: ["1", "n"], name: "tiene", kind: "1:N", mandatory: false, attributes: [], roles: ["", ""] }); setError(""); setDialog("relation"); };
+  const openRelation = () => {
+    setRelationMode("binary");
+    setRelation({
+      source: "",
+      target: "",
+      additional: [],
+      minimums: [1, 0],
+      maximums: ["1", "n"],
+      name: "tiene",
+      kind: "1:N",
+      mandatory: false,
+      attributes: [],
+      roles: ["", ""],
+    });
+    setError("");
+    setDialog("relation");
+  };
   const changeRelationMode = (next: RelationMode) => {
     if (next === relationMode) return;
     setRelationMode(next);
-    setRelation(current => {
+    setRelation((current) => {
       const sameEntity = current.target.toLowerCase() === current.source.toLowerCase();
-      if (next === "recursive") return { ...current, additional: [], target: current.source, minimums: [0, 0], maximums: ["1", "n"] };
-      if (next === "nary") return { ...current, additional: [""], target: sameEntity ? "" : current.target, minimums: [0, 0, 0], maximums: ["n", "n"] };
-      return { ...current, additional: [], target: sameEntity ? "" : current.target, minimums: [1, 0], maximums: ["1", "n"] };
+      if (next === "recursive")
+        return {
+          ...current,
+          additional: [],
+          target: current.source,
+          minimums: [0, 0],
+          maximums: ["1", "n"],
+        };
+      if (next === "nary")
+        return {
+          ...current,
+          additional: [""],
+          target: sameEntity ? "" : current.target,
+          minimums: [0, 0, 0],
+          maximums: ["n", "n"],
+        };
+      return {
+        ...current,
+        additional: [],
+        target: sameEntity ? "" : current.target,
+        minimums: [1, 0],
+        maximums: ["1", "n"],
+      };
     });
   };
-  const setAdditionalParticipant = (index: number, value: string) => setRelation(current => ({ ...current, additional: current.additional.map((item, i) => i === index ? value : item) }));
-  const addParticipant = () => setRelation(current => ({ ...current, additional: [...current.additional, ""], minimums: [...current.minimums, 0] }));
-  const removeParticipant = (index: number) => setRelation(current => ({ ...current, additional: current.additional.filter((_, i) => i !== index), minimums: current.minimums.filter((_, i) => i !== index + 2) }));
-  const openWeakEntity = () => { const parent = tables.find(table => table.primaryKey.length > 0); setWeakDraft({ name: `entidad_debil_${tables.length + 1}`, parent: parent?.name ?? "", dependency: "ID", cardinality: "0:N", identifier: "id", relationName: "", attributes: "" }); setWeakAttributes([]); setError(""); setDialog("weak"); };
+  const setAdditionalParticipant = (index: number, value: string) =>
+    setRelation((current) => ({
+      ...current,
+      additional: current.additional.map((item, i) => (i === index ? value : item)),
+    }));
+  const addParticipant = () =>
+    setRelation((current) => ({
+      ...current,
+      additional: [...current.additional, ""],
+      minimums: [...current.minimums, 0],
+    }));
+  const removeParticipant = (index: number) =>
+    setRelation((current) => ({
+      ...current,
+      additional: current.additional.filter((_, i) => i !== index),
+      minimums: current.minimums.filter((_, i) => i !== index + 2),
+    }));
+  const openWeakEntity = () => {
+    const parent = tables.find((table) => table.primaryKey.length > 0);
+    setWeakDraft({
+      name: `entidad_debil_${tables.length + 1}`,
+      parent: parent?.name ?? "",
+      dependency: "ID",
+      cardinality: "0:N",
+      identifier: "id",
+      relationName: "",
+      attributes: "",
+    });
+    setWeakAttributes([]);
+    setError("");
+    setDialog("weak");
+  };
   const saveWeakEntity = () => {
-    const name = weakDraft.name.trim(); const parent = tables.find(table => table.name === weakDraft.parent); const identifier = weakDraft.identifier.trim();
-    const identifying = weakDraft.dependency === "ID"; const maxOne = weakDraft.cardinality.endsWith(":1"); const needsIdentifier = !identifying;
-    if (!name) { setError("Escribe un nombre para la entidad débil."); return; }
-    if (tables.some(table => table.name.toLowerCase() === name.toLowerCase())) { setError("Ya existe una entidad con ese nombre."); return; }
-    if (!parent || !parent.primaryKey.length) { setError("Selecciona una entidad fuerte que tenga clave primaria."); return; }
-    if (needsIdentifier && !identifier) { setError("Escribe el identificador propio de la entidad débil."); return; }
-    const parentColumns = parent.primaryKey.map(key => parent.columns.find(column => column.name.toLowerCase() === key.toLowerCase())).filter((column): column is Column => Boolean(column));
-    if (parentColumns.length !== parent.primaryKey.length) { setError("No se pudieron resolver todos los atributos de la PK de la entidad fuerte."); return; }
-    const foreignColumns: Column[] = parentColumns.map(column => { const base = weakDraft.dependency === "E" ? `${parent.name.toLowerCase()}_${column.name}` : column.name; let foreignName = base; let suffix = 2; while (needsIdentifier && identifier.toLowerCase() === foreignName.toLowerCase()) foreignName = `${base}_${suffix++}`; return { name: foreignName, type: column.type, nullable: false, primaryKey: identifying, unique: false, foreignKey: { table: parent.name, columns: parent.primaryKey, dependency: weakDraft.dependency, onDelete: "CASCADE" } }; });
-    const ownKey: Column = { name: identifier, type: "INTEGER", nullable: false, primaryKey: true, unique: false };
-    const extraNames = weakAttributes.map(attribute => attribute.name.trim()).filter(Boolean);
-    if (weakAttributes.some(attribute => !attribute.name.trim())) { setError("Completa el nombre de todos los atributos."); return; }
+    const name = weakDraft.name.trim();
+    const parent = tables.find((table) => table.name === weakDraft.parent);
+    const identifier = weakDraft.identifier.trim();
+    const identifying = weakDraft.dependency === "ID";
+    const maxOne = weakDraft.cardinality.endsWith(":1");
+    const needsIdentifier = !identifying;
+    if (!name) {
+      setError("Escribe un nombre para la entidad débil.");
+      return;
+    }
+    if (tables.some((table) => table.name.toLowerCase() === name.toLowerCase())) {
+      setError("Ya existe una entidad con ese nombre.");
+      return;
+    }
+    if (!parent || !parent.primaryKey.length) {
+      setError("Selecciona una entidad fuerte que tenga clave primaria.");
+      return;
+    }
+    if (needsIdentifier && !identifier) {
+      setError("Escribe el identificador propio de la entidad débil.");
+      return;
+    }
+    const parentColumns = parent.primaryKey
+      .map((key) =>
+        parent.columns.find((column) => column.name.toLowerCase() === key.toLowerCase()),
+      )
+      .filter((column): column is Column => Boolean(column));
+    if (parentColumns.length !== parent.primaryKey.length) {
+      setError("No se pudieron resolver todos los atributos de la PK de la entidad fuerte.");
+      return;
+    }
+    const foreignColumns: Column[] = parentColumns.map((column) => {
+      const base =
+        weakDraft.dependency === "E" ? `${parent.name.toLowerCase()}_${column.name}` : column.name;
+      let foreignName = base;
+      let suffix = 2;
+      while (needsIdentifier && identifier.toLowerCase() === foreignName.toLowerCase())
+        foreignName = `${base}_${suffix++}`;
+      return {
+        name: foreignName,
+        type: column.type,
+        nullable: false,
+        primaryKey: identifying,
+        unique: false,
+        foreignKey: {
+          table: parent.name,
+          columns: parent.primaryKey,
+          dependency: weakDraft.dependency,
+          onDelete: "CASCADE",
+        },
+      };
+    });
+    const ownKey: Column = {
+      name: identifier,
+      type: "INTEGER",
+      nullable: false,
+      primaryKey: true,
+      unique: false,
+    };
+    const extraNames = weakAttributes.map((attribute) => attribute.name.trim()).filter(Boolean);
+    if (weakAttributes.some((attribute) => !attribute.name.trim())) {
+      setError("Completa el nombre de todos los atributos.");
+      return;
+    }
     const keyColumns = needsIdentifier ? [identifier] : [];
-    const names = [...foreignColumns.map(column => column.name), ...keyColumns, ...extraNames].map(item => item.toLowerCase());
-    if (new Set(names).size !== names.length) { setError("Los nombres de atributos deben ser únicos y distintos a la FK heredada."); return; }
-    const extras: Column[] = weakAttributes.filter(attribute => attribute.name.trim()).map(attribute => ({ name: attribute.name.trim(), type: attribute.type.trim() || "TEXT", nullable: !attribute.required, primaryKey: false, unique: attribute.unique || attribute.alternateKey, alternateKey: attribute.alternateKey }));
+    const names = [
+      ...foreignColumns.map((column) => column.name),
+      ...keyColumns,
+      ...extraNames,
+    ].map((item) => item.toLowerCase());
+    if (new Set(names).size !== names.length) {
+      setError("Los nombres de atributos deben ser únicos y distintos a la FK heredada.");
+      return;
+    }
+    const extras: Column[] = weakAttributes
+      .filter((attribute) => attribute.name.trim())
+      .map((attribute) => ({
+        name: attribute.name.trim(),
+        type: attribute.type.trim() || "TEXT",
+        nullable: !attribute.required,
+        primaryKey: false,
+        unique: attribute.unique || attribute.alternateKey,
+        alternateKey: attribute.alternateKey,
+      }));
     const columns = [...foreignColumns, ...(needsIdentifier ? [ownKey] : []), ...extras];
     const relationName = weakDraft.relationName.trim();
-    if (!relationName) { setError("Escribe el nombre de la relación."); return; }
-    const foreignKey: ForeignKey = { columns: foreignColumns.map(column => column.name), table: parent.name, targetColumns: parent.primaryKey, dependency: weakDraft.dependency, onDelete: "CASCADE", weakCardinality: weakDraft.cardinality, relationName };
+    if (!relationName) {
+      setError("Escribe el nombre de la relación.");
+      return;
+    }
+    const foreignKey: ForeignKey = {
+      columns: foreignColumns.map((column) => column.name),
+      table: parent.name,
+      targetColumns: parent.primaryKey,
+      dependency: weakDraft.dependency,
+      onDelete: "CASCADE",
+      weakCardinality: weakDraft.cardinality,
+      relationName,
+    };
     const uniqueKeys = maxOne && !identifying ? [foreignKey.columns] : [];
-    const table: Table = { name, columns, primaryKey: columns.filter(column => column.primaryKey).map(column => column.name), uniqueKeys, foreignKeys: [foreignKey], checks: [] };
-    onChange([...tables, table]);
-    const marks = { ...attributeMarks }; const nextDomains = { ...domains };
-    weakAttributes.forEach(attribute => { const key = `${name}.${attribute.name.trim()}`; if (attribute.kind !== "simple") marks[key] = { kind: attribute.kind, parts: attribute.parts.split(",").map(part => part.trim()).filter(Boolean) }; if (attribute.domain.trim()) nextDomains[key] = attribute.domain.trim(); });
-    setAttributeMarks(marks); setDomains(nextDomains); setDialog(null);
-  };  const saveEntity = () => {
-    const name = entityName.trim();
-    if (!name) { setError("Escribe un nombre para la entidad."); return; }
-    if (tables.some(table => table.name.toLowerCase() === name.toLowerCase())) { setError("Ya existe una entidad con ese nombre."); return; }
-    if (!attributes.length || attributes.some(attribute => !attribute.name.trim())) { setError("Completa el nombre de todos los atributos."); return; }
-    if (new Set(attributes.map(attribute => attribute.name.trim().toLowerCase())).size !== attributes.length) { setError("Los nombres de los atributos deben ser únicos dentro de la entidad."); return; }
-    const primary = attributes.filter(attribute => attribute.primaryKey);
-    if (primary.length !== 1) { setError("Cada entidad debe tener exactamente una clave primaria (PK)."); return; }
-    if (primary[0].kind === "optional" || primary[0].kind === "multivalued") { setError("La PK no puede ser opcional ni multivaluada."); return; }
-    const columns: Column[] = attributes.map(attribute => ({ name: attribute.name.trim(), type: attribute.type.trim() || "TEXT", nullable: !attribute.primaryKey && (!attribute.required || attribute.kind === "optional"), primaryKey: attribute.primaryKey, alternateKey: attribute.alternateKey, unique: attribute.unique || attribute.alternateKey }));
-    const table: Table = { name, columns, primaryKey: keyColumns(columns), uniqueKeys: columns.filter(column => column.unique).map(column => [column.name]), foreignKeys: [], checks: [] };
+    const table: Table = {
+      name,
+      columns,
+      primaryKey: columns.filter((column) => column.primaryKey).map((column) => column.name),
+      uniqueKeys,
+      foreignKeys: [foreignKey],
+      checks: [],
+    };
     onChange([...tables, table]);
     const marks = { ...attributeMarks };
-    attributes.forEach(attribute => { if (attribute.kind !== "simple") marks[`${name}.${attribute.name.trim()}`] = { kind: attribute.kind, parts: attribute.parts.split(",").map(part => part.trim()).filter(Boolean) }; });
-    setAttributeMarks(marks); setDomains({ ...domains, ...Object.fromEntries(attributes.filter(attribute => attribute.domain.trim()).map(attribute => [`${name}.${attribute.name.trim()}`, attribute.domain.trim()])) }); setDialog(null);
+    const nextDomains = { ...domains };
+    weakAttributes.forEach((attribute) => {
+      const key = `${name}.${attribute.name.trim()}`;
+      if (attribute.kind !== "simple")
+        marks[key] = {
+          kind: attribute.kind,
+          parts: attribute.parts
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        };
+      if (attribute.domain.trim()) nextDomains[key] = attribute.domain.trim();
+    });
+    setAttributeMarks(marks);
+    setDomains(nextDomains);
+    setDialog(null);
+  };
+  const saveEntity = () => {
+    const name = entityName.trim();
+    if (!name) {
+      setError("Escribe un nombre para la entidad.");
+      return;
+    }
+    if (tables.some((table) => table.name.toLowerCase() === name.toLowerCase())) {
+      setError("Ya existe una entidad con ese nombre.");
+      return;
+    }
+    if (!attributes.length || attributes.some((attribute) => !attribute.name.trim())) {
+      setError("Completa el nombre de todos los atributos.");
+      return;
+    }
+    if (
+      new Set(attributes.map((attribute) => attribute.name.trim().toLowerCase())).size !==
+      attributes.length
+    ) {
+      setError("Los nombres de los atributos deben ser únicos dentro de la entidad.");
+      return;
+    }
+    const primary = attributes.filter((attribute) => attribute.primaryKey);
+    if (primary.length !== 1) {
+      setError("Cada entidad debe tener exactamente una clave primaria (PK).");
+      return;
+    }
+    if (primary[0].kind === "optional" || primary[0].kind === "multivalued") {
+      setError("La PK no puede ser opcional ni multivaluada.");
+      return;
+    }
+    const columns: Column[] = attributes.map((attribute) => ({
+      name: attribute.name.trim(),
+      type: attribute.type.trim() || "TEXT",
+      nullable: !attribute.primaryKey && (!attribute.required || attribute.kind === "optional"),
+      primaryKey: attribute.primaryKey,
+      alternateKey: attribute.alternateKey,
+      unique: attribute.unique || attribute.alternateKey,
+    }));
+    const table: Table = {
+      name,
+      columns,
+      primaryKey: keyColumns(columns),
+      uniqueKeys: columns.filter((column) => column.unique).map((column) => [column.name]),
+      foreignKeys: [],
+      checks: [],
+    };
+    onChange([...tables, table]);
+    const marks = { ...attributeMarks };
+    attributes.forEach((attribute) => {
+      if (attribute.kind !== "simple")
+        marks[`${name}.${attribute.name.trim()}`] = {
+          kind: attribute.kind,
+          parts: attribute.parts
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        };
+    });
+    setAttributeMarks(marks);
+    setDomains({
+      ...domains,
+      ...Object.fromEntries(
+        attributes
+          .filter((attribute) => attribute.domain.trim())
+          .map((attribute) => [`${name}.${attribute.name.trim()}`, attribute.domain.trim()]),
+      ),
+    });
+    setDialog(null);
   };
   const saveEditedEntity = () => {
     if (!editingEntityName) return saveEntity();
-    const oldName = editingEntityName; const nextName = entityName.trim();
-    if (!nextName) { setError("Escribe un nombre para la entidad."); return; }
-    if (tables.some(table => table.name.toLowerCase() === nextName.toLowerCase() && table.name.toLowerCase() !== oldName.toLowerCase())) { setError("Ya existe una entidad con ese nombre."); return; }
-    if (!attributes.length || attributes.some(attribute => !attribute.name.trim())) { setError("Completa el nombre de todos los atributos."); return; }
-    if (new Set(attributes.map(attribute => attribute.name.trim().toLowerCase())).size !== attributes.length) { setError("Los nombres de los atributos deben ser únicos dentro de la entidad."); return; }
-    if (attributes.filter(attribute => attribute.primaryKey).length !== 1) { setError("Cada entidad debe tener exactamente una clave primaria (PK)."); return; }
-    const original = tables.find(table => table.name === oldName); if (!original) return;
-    const renamedColumns = new Map(attributes.filter(attribute => attribute.originalName).map(attribute => [attribute.originalName!.toLowerCase(), attribute.name.trim()]));
+    const oldName = editingEntityName;
+    const nextName = entityName.trim();
+    if (!nextName) {
+      setError("Escribe un nombre para la entidad.");
+      return;
+    }
+    if (
+      tables.some(
+        (table) =>
+          table.name.toLowerCase() === nextName.toLowerCase() &&
+          table.name.toLowerCase() !== oldName.toLowerCase(),
+      )
+    ) {
+      setError("Ya existe una entidad con ese nombre.");
+      return;
+    }
+    if (!attributes.length || attributes.some((attribute) => !attribute.name.trim())) {
+      setError("Completa el nombre de todos los atributos.");
+      return;
+    }
+    if (
+      new Set(attributes.map((attribute) => attribute.name.trim().toLowerCase())).size !==
+      attributes.length
+    ) {
+      setError("Los nombres de los atributos deben ser únicos dentro de la entidad.");
+      return;
+    }
+    if (attributes.filter((attribute) => attribute.primaryKey).length !== 1) {
+      setError("Cada entidad debe tener exactamente una clave primaria (PK).");
+      return;
+    }
+    const original = tables.find((table) => table.name === oldName);
+    if (!original) return;
+    const renamedColumns = new Map(
+      attributes
+        .filter((attribute) => attribute.originalName)
+        .map((attribute) => [attribute.originalName!.toLowerCase(), attribute.name.trim()]),
+    );
     const mapColumn = (name: string) => renamedColumns.get(name.toLowerCase()) ?? name;
-    const columns: Column[] = attributes.map(attribute => { const name = attribute.name.trim(); const previous = original.columns.find(column => column.name.toLowerCase() === (attribute.originalName ?? "").toLowerCase()); return { ...(previous ?? {}), name, type: attribute.type.trim() || "TEXT", nullable: !attribute.primaryKey && (!attribute.required || attribute.kind === "optional"), primaryKey: attribute.primaryKey, alternateKey: attribute.alternateKey, unique: attribute.unique || attribute.alternateKey }; });
-    const retained = new Set(columns.map(column => column.name.toLowerCase()));
-    const nextTables = tables.map(table => {
-      if (table.name === oldName) return { ...table, name: nextName, columns: columns.map(column => column.foreignKey?.table.toLowerCase() === oldName.toLowerCase() ? { ...column, foreignKey: { ...column.foreignKey, table: nextName, columns: column.foreignKey.columns?.map(mapColumn) } } : column), primaryKey: columns.filter(column => column.primaryKey).map(column => column.name), uniqueKeys: [...new Map([...table.uniqueKeys.map(key => key.map(mapColumn).filter(name => retained.has(name.toLowerCase()))).filter(key => key.length), ...columns.filter(column => column.unique).map(column => [column.name])].map(key => [key.map(name => name.toLowerCase()).join("|") || key[0].toLowerCase(), key])).values()], foreignKeys: table.foreignKeys.filter(fk => fk.columns.every(name => retained.has(mapColumn(name).toLowerCase()))).map(fk => ({ ...fk, table: fk.table.toLowerCase() === oldName.toLowerCase() ? nextName : fk.table, columns: fk.columns.map(mapColumn), targetColumns: fk.table.toLowerCase() === oldName.toLowerCase() ? fk.targetColumns?.map(mapColumn) : fk.targetColumns })) };
-      return { ...table, columns: table.columns.map(column => column.foreignKey?.table.toLowerCase() === oldName.toLowerCase() ? { ...column, foreignKey: { ...column.foreignKey, table: nextName, columns: column.foreignKey.columns?.map(mapColumn) } } : column), foreignKeys: table.foreignKeys.map(fk => ({ ...fk, table: fk.table.toLowerCase() === oldName.toLowerCase() ? nextName : fk.table, targetColumns: fk.table.toLowerCase() === oldName.toLowerCase() ? fk.targetColumns?.map(mapColumn) : fk.targetColumns })) };
+    const columns: Column[] = attributes.map((attribute) => {
+      const name = attribute.name.trim();
+      const previous = original.columns.find(
+        (column) => column.name.toLowerCase() === (attribute.originalName ?? "").toLowerCase(),
+      );
+      return {
+        ...(previous ?? {}),
+        name,
+        type: attribute.type.trim() || "TEXT",
+        nullable: !attribute.primaryKey && (!attribute.required || attribute.kind === "optional"),
+        primaryKey: attribute.primaryKey,
+        alternateKey: attribute.alternateKey,
+        unique: attribute.unique || attribute.alternateKey,
+      };
+    });
+    const retained = new Set(columns.map((column) => column.name.toLowerCase()));
+    const nextTables = tables.map((table) => {
+      if (table.name === oldName)
+        return {
+          ...table,
+          name: nextName,
+          columns: columns.map((column) =>
+            column.foreignKey?.table.toLowerCase() === oldName.toLowerCase()
+              ? {
+                  ...column,
+                  foreignKey: {
+                    ...column.foreignKey,
+                    table: nextName,
+                    columns: column.foreignKey.columns?.map(mapColumn),
+                  },
+                }
+              : column,
+          ),
+          primaryKey: columns.filter((column) => column.primaryKey).map((column) => column.name),
+          uniqueKeys: [
+            ...new Map(
+              [
+                ...table.uniqueKeys
+                  .map((key) =>
+                    key.map(mapColumn).filter((name) => retained.has(name.toLowerCase())),
+                  )
+                  .filter((key) => key.length),
+                ...columns.filter((column) => column.unique).map((column) => [column.name]),
+              ].map((key) => [
+                key.map((name) => name.toLowerCase()).join("|") || key[0].toLowerCase(),
+                key,
+              ]),
+            ).values(),
+          ],
+          foreignKeys: table.foreignKeys
+            .filter((fk) => fk.columns.every((name) => retained.has(mapColumn(name).toLowerCase())))
+            .map((fk) => ({
+              ...fk,
+              table: fk.table.toLowerCase() === oldName.toLowerCase() ? nextName : fk.table,
+              columns: fk.columns.map(mapColumn),
+              targetColumns:
+                fk.table.toLowerCase() === oldName.toLowerCase()
+                  ? fk.targetColumns?.map(mapColumn)
+                  : fk.targetColumns,
+            })),
+        };
+      return {
+        ...table,
+        columns: table.columns.map((column) =>
+          column.foreignKey?.table.toLowerCase() === oldName.toLowerCase()
+            ? {
+                ...column,
+                foreignKey: {
+                  ...column.foreignKey,
+                  table: nextName,
+                  columns: column.foreignKey.columns?.map(mapColumn),
+                },
+              }
+            : column,
+        ),
+        foreignKeys: table.foreignKeys.map((fk) => ({
+          ...fk,
+          table: fk.table.toLowerCase() === oldName.toLowerCase() ? nextName : fk.table,
+          targetColumns:
+            fk.table.toLowerCase() === oldName.toLowerCase()
+              ? fk.targetColumns?.map(mapColumn)
+              : fk.targetColumns,
+        })),
+      };
     });
     onChange(nextTables);
-    const nextMarks = Object.fromEntries(Object.entries(attributeMarks).filter(([key]) => !key.startsWith(`${oldName}.`)));
-    const nextDomains = Object.fromEntries(Object.entries(domains).filter(([key]) => !key.startsWith(`${oldName}.`)));
-    attributes.forEach(attribute => { const key = `${nextName}.${attribute.name.trim()}`; if (attribute.kind !== "simple") nextMarks[key] = { kind: attribute.kind, parts: attribute.parts.split(",").map(part => part.trim()).filter(Boolean) }; if (attribute.domain.trim()) nextDomains[key] = attribute.domain.trim(); });
-    setAttributeMarks(nextMarks); setDomains(nextDomains); if (oldName !== nextName) onEntityRenamed?.(oldName, nextName); setDialog(null); setEditingEntityName(null);
+    const nextMarks = Object.fromEntries(
+      Object.entries(attributeMarks).filter(([key]) => !key.startsWith(`${oldName}.`)),
+    );
+    const nextDomains = Object.fromEntries(
+      Object.entries(domains).filter(([key]) => !key.startsWith(`${oldName}.`)),
+    );
+    attributes.forEach((attribute) => {
+      const key = `${nextName}.${attribute.name.trim()}`;
+      if (attribute.kind !== "simple")
+        nextMarks[key] = {
+          kind: attribute.kind,
+          parts: attribute.parts
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        };
+      if (attribute.domain.trim()) nextDomains[key] = attribute.domain.trim();
+    });
+    setAttributeMarks(nextMarks);
+    setDomains(nextDomains);
+    if (oldName !== nextName) onEntityRenamed?.(oldName, nextName);
+    setDialog(null);
+    setEditingEntityName(null);
   };
   const saveRelation = () => {
-    if (tables.length < 1) { setError("Crea una entidad antes de añadir una interrelación."); return; }
+    if (tables.length < 1) {
+      setError("Crea una entidad antes de añadir una interrelación.");
+      return;
+    }
     const participants = [relation.source, relation.target, ...relation.additional];
-    if (participants.some(name => !name)) { setError("Selecciona una entidad para cada participante."); return; }
-    if (participants.length > 2 && new Set(participants.map(name => name.toLowerCase())).size !== participants.length) { setError("En una interrelación de tres o cuatro entidades, cada participante debe ser distinto."); return; }
-    const recursive = participants.length === 2 && participants[0].toLocaleLowerCase() === participants[1].toLocaleLowerCase();
+    if (participants.some((name) => !name)) {
+      setError("Selecciona una entidad para cada participante.");
+      return;
+    }
+    if (
+      participants.length > 2 &&
+      new Set(participants.map((name) => name.toLowerCase())).size !== participants.length
+    ) {
+      setError(
+        "En una interrelación de tres o cuatro entidades, cada participante debe ser distinto.",
+      );
+      return;
+    }
+    const recursive =
+      participants.length === 2 &&
+      participants[0].toLocaleLowerCase() === participants[1].toLocaleLowerCase();
     const name = relation.name.trim();
-    if (!name) { setError("Escribe el nombre de la interrelación."); return; }
-    const reverse = participants.length === 2 && relation.maximums[0] === "n" && relation.maximums[1] === "1";
+    if (!name) {
+      setError("Escribe el nombre de la interrelación.");
+      return;
+    }
+    const reverse =
+      participants.length === 2 && relation.maximums[0] === "n" && relation.maximums[1] === "1";
     const kind = participants.length > 2 ? "N:M" : relationKindFromMaximums(relation.maximums);
     const orderedParticipants = reverse ? [relation.target, relation.source] : participants;
-    const participantMinimums = relation.minimums.slice(0, participants.length); if (reverse) [participantMinimums[0], participantMinimums[1]] = [participantMinimums[1], participantMinimums[0]];
-    const participantMaximums = relation.maximums.slice(0, participants.length); if (reverse) [participantMaximums[0], participantMaximums[1]] = [participantMaximums[1], participantMaximums[0]];
-    const draft: RelationDraft = { ...relation, source: orderedParticipants[0], target: orderedParticipants[1], participants: orderedParticipants, participantMinimums, participantMaximums, kind, mandatory: kind !== "N:M" && participantMinimums[1] === 1, name, roles: recursive ? (reverse ? [...relation.roles].reverse() : relation.roles).map(role=>role.trim()) as [string,string] : undefined, attributes: relation.attributes.map(item => item.trim()).filter(Boolean) };
-    if (!createRelation(draft)) { setError("No se pudo crear: revisa las PK, los nombres de atributos y que el nombre de la asociación esté disponible."); return; }
+    const participantMinimums = relation.minimums.slice(0, participants.length);
+    if (reverse)
+      [participantMinimums[0], participantMinimums[1]] = [
+        participantMinimums[1],
+        participantMinimums[0],
+      ];
+    const participantMaximums = relation.maximums.slice(0, participants.length);
+    if (reverse)
+      [participantMaximums[0], participantMaximums[1]] = [
+        participantMaximums[1],
+        participantMaximums[0],
+      ];
+    const draft: RelationDraft = {
+      ...relation,
+      source: orderedParticipants[0],
+      target: orderedParticipants[1],
+      participants: orderedParticipants,
+      participantMinimums,
+      participantMaximums,
+      kind,
+      mandatory: kind !== "N:M" && participantMinimums[1] === 1,
+      name,
+      roles: recursive
+        ? ((reverse ? [...relation.roles].reverse() : relation.roles).map((role) =>
+            role.trim(),
+          ) as [string, string])
+        : undefined,
+      attributes: relation.attributes.map((item) => item.trim()).filter(Boolean),
+    };
+    if (!createRelation(draft)) {
+      setError(
+        "No se pudo crear: revisa las PK, los nombres de atributos y que el nombre de la asociación esté disponible.",
+      );
+      return;
+    }
     setDialog(null);
   };
-  const updateAttribute = (index: number, patch: Partial<DraftAttribute>) => setAttributes(current => current.map((attribute, i) => ({ ...attribute, ...(i === index ? patch : {}), ...(patch.primaryKey && i !== index ? { primaryKey: false } : {}) })));
-  const openEntityMenu = (name: string) => { setEntityMenu(name); setEntityNameDraft(name); setAttributeMenu(null); setMenuError(""); };
-  const openAttributeMenu = (entity: string, column: Column) => { setAttributeMenu({entity,name:column.name}); setAttributeDraft(column); setEntityMenu(null); setMenuError(""); };
-  const updateCurrentAttribute = (patch: Partial<Column>) => { if (!attributeMenu || !attributeDraft) return; if (!editAttribute(attributeMenu.entity, attributeMenu.name, patch)) { setMenuError("No se pudo guardar. Revisa el nombre y las claves relacionadas."); return; } const next={...attributeDraft,...patch}; setAttributeDraft(next); setAttributeMenu({...attributeMenu,name:next.name ?? attributeMenu.name}); };
-  const updateAttributeMark = (kind: "simple" | AttributeMark["kind"]) => { if (!attributeMenu) return; const key=attributeMenu.entity+"."+attributeMenu.name; const next={...attributeMarks}; if(kind==="simple") delete next[key]; else next[key]={kind,parts:next[key]?.parts ?? []}; setAttributeMarks(next); };
+  const updateAttribute = (index: number, patch: Partial<DraftAttribute>) =>
+    setAttributes((current) =>
+      current.map((attribute, i) => ({
+        ...attribute,
+        ...(i === index ? patch : {}),
+        ...(patch.primaryKey && i !== index ? { primaryKey: false } : {}),
+      })),
+    );
+  const openEntityMenu = (name: string) => {
+    setEntityMenu(name);
+    setEntityNameDraft(name);
+    setAttributeMenu(null);
+    setMenuError("");
+  };
+  const openAttributeMenu = (entity: string, column: Column) => {
+    setAttributeMenu({ entity, name: column.name });
+    setAttributeDraft(column);
+    setEntityMenu(null);
+    setMenuError("");
+  };
+  const updateCurrentAttribute = (patch: Partial<Column>) => {
+    if (!attributeMenu || !attributeDraft) return;
+    if (!editAttribute(attributeMenu.entity, attributeMenu.name, patch)) {
+      setMenuError("No se pudo guardar. Revisa el nombre y las claves relacionadas.");
+      return;
+    }
+    const next = { ...attributeDraft, ...patch };
+    setAttributeDraft(next);
+    setAttributeMenu({ ...attributeMenu, name: next.name ?? attributeMenu.name });
+  };
+  const updateAttributeMark = (kind: "simple" | AttributeMark["kind"]) => {
+    if (!attributeMenu) return;
+    const key = attributeMenu.entity + "." + attributeMenu.name;
+    const next = { ...attributeMarks };
+    if (kind === "simple") delete next[key];
+    else next[key] = { kind, parts: next[key]?.parts ?? [] };
+    setAttributeMarks(next);
+  };
 
-  const selectedDraft = selectedDraftAttribute === null ? undefined : attributes[selectedDraftAttribute];
+  const selectedDraft =
+    selectedDraftAttribute === null ? undefined : attributes[selectedDraftAttribute];
 
-  return <div className="designer tool-palette"><header className="designer-heading"><div><h2>Herramientas del modelo</h2><p>Selecciona una figura para agregarla al diagrama.</p></div></header>
-    <div className="model-tools">
-      <button type="button" className="model-tool" onClick={openEntity}><span className="tool-shape entity-shape" aria-hidden="true"/><span><strong>Entidad</strong><small>Crear entidad y clasificar atributos</small></span><b>＋</b></button>
-      <button type="button" className="model-tool" onClick={openWeakEntity} disabled={!tables.some(table => table.primaryKey.length > 0)}><span className="tool-shape weak-entity-shape" aria-hidden="true"/><span><strong>Entidad débil</strong><small>Depende de una entidad fuerte · Ex o Id</small></span><b>＋</b></button>
-      <button type="button" className="model-tool" onClick={openRelation} disabled={tables.length === 0}><span className="tool-shape relation-shape" aria-hidden="true"/><span><strong>Interrelación</strong><small>{tables.length ? "Conectar entidades, incluso consigo mismas" : "Crea una entidad para habilitar esta opción"}</small></span><b>＋</b></button>
-      <button type="button" className="model-tool" onClick={requestHierarchy} disabled={hierarchyEntityCount < 3}><span className="tool-shape hierarchy-shape" aria-hidden="true"/><span><strong>Herencia</strong><small>Requiere tres entidades: un supertipo y dos subtipos</small></span><b>＋</b></button>
-    </div><button type="button" className="arrange-model" title="Reordena las entidades y ajusta el zoom para mostrar el diagrama completo" onClick={requestArrange} disabled={tables.length < 2}>✦ Ordenar y ajustar MER</button>
-    <div className="palette-summary"><strong>{tables.length} {tables.length === 1 ? "entidad" : "entidades"}</strong><div className="entity-card-list">{tables.map(table => <details className="entity-card" key={table.name}><summary onDoubleClick={() => openEntityMenu(table.name)}><span><strong>{table.name}</strong><small>{table.columns.length} {table.columns.length === 1 ? "atributo" : "atributos"}</small></span><small>Doble clic para editar</small></summary><div className="entity-card-attributes">{table.columns.map(column => <div className="entity-attribute-card" key={column.name} onDoubleClick={() => openAttributeMenu(table.name,column)}><span><strong>{column.name}</strong><small>{column.type}{column.primaryKey?" · PK":""}{column.alternateKey?" · AK":""}{column.unique?" · UK":""}{!column.nullable?" · NOT NULL":""}</small></span><button type="button" onClick={() => openAttributeMenu(table.name,column)}>Editar</button></div>)}<button type="button" className="add-draft-attribute" onClick={() => { const name=addAttribute(table.name); if(name){const added=table.columns.find(column=>column.name===name) ?? {name,type:"TEXT",nullable:true,primaryKey:false,unique:false}; openAttributeMenu(table.name,added);} }}>＋ Añadir atributo</button></div></details>)}</div></div>
-    {entityMenu && tables.find(table=>table.name===entityMenu) && <div className="designer-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setEntityMenu(null);}}><section className="designer-modal mini-editor-modal" role="dialog" aria-modal="true" aria-label="Editar entidad"><header><div><h3>Editar entidad</h3><p>{entityMenu}</p></div><button type="button" aria-label="Cerrar" onClick={()=>setEntityMenu(null)}>×</button></header><div className="modal-content"><label className="form-field">Nombre de la entidad<input autoFocus value={entityNameDraft} onChange={event=>setEntityNameDraft(event.target.value)}/></label></div>{menuError&&<p className="designer-error" role="alert">{menuError}</p>}<footer><button type="button" className="modal-cancel" onClick={()=>setEntityMenu(null)}>Cancelar</button><button type="button" className="inspector-danger" onClick={()=>{deleteEntity(entityMenu);setEntityMenu(null);}}>Eliminar entidad</button><button type="button" className="modal-save" onClick={()=>{if(renameEntity(entityMenu,entityNameDraft)){setEntityMenu(entityNameDraft.trim());}}}>Guardar</button></footer></section></div>}
-    {attributeMenu && attributeDraft && <div className="designer-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setAttributeMenu(null);}}><section className="designer-modal mini-editor-modal" role="dialog" aria-modal="true" aria-label="Editar atributo"><header><div><h3>Editar atributo</h3><p>{attributeMenu.entity} · {attributeMenu.name}</p></div><button type="button" aria-label="Cerrar" onClick={()=>setAttributeMenu(null)}>×</button></header><div className="modal-content"><label className="form-field">Nombre<input autoFocus value={attributeDraft.name} onChange={event=>updateCurrentAttribute({name:event.target.value})}/></label><label className="form-field">Tipo<input value={attributeDraft.type} onChange={event=>updateCurrentAttribute({type:event.target.value})}/></label><div className="attribute-checks"><label><input type="checkbox" checked={Boolean(attributeDraft.alternateKey)} onChange={event=>updateCurrentAttribute({alternateKey:event.target.checked})}/> AK</label><label><input type="checkbox" checked={Boolean(attributeDraft.unique)} onChange={event=>updateCurrentAttribute({unique:event.target.checked})}/> UK</label><label><input type="checkbox" checked={!attributeDraft.nullable} onChange={event=>updateCurrentAttribute({nullable:!event.target.checked})}/> Obligatorio</label></div><details className="attribute-classifications"><summary>Clasificación</summary><div className="attribute-checks classification-checks">{(["simple","derived","multivalued","composite","multivalued-composite","optional"] as const).map(kind=><label key={kind}><input type="radio" name="sidebar-attribute-kind" checked={(attributeMarks[attributeMenu.entity+"."+attributeMenu.name]?.kind ?? "simple")===kind} onChange={()=>updateAttributeMark(kind)}/>{{simple:"Simple",derived:"Derivado",multivalued:"Multivaluado",composite:"Compuesto","multivalued-composite":"Multivaluado compuesto",optional:"Opcional"}[kind]}</label>)}</div></details>{(["composite","multivalued-composite"] as const).includes(attributeMarks[attributeMenu.entity+"."+attributeMenu.name]?.kind as "composite"|"multivalued-composite") && <label className="form-field">Componentes<input value={attributeMarks[attributeMenu.entity+"."+attributeMenu.name]?.parts.join(", ")??""} onChange={event=>{const key=attributeMenu.entity+"."+attributeMenu.name;setAttributeMarks({...attributeMarks,[key]:{kind:attributeMarks[key]?.kind??"composite",parts:event.target.value.split(",").map(part=>part.trim()).filter(Boolean)}});}} placeholder="nombre, apellido"/></label>}<label className="form-field">Dominio<input value={domains[attributeMenu.entity+"."+attributeMenu.name]??""} onChange={event=>setDomains({...domains,[attributeMenu.entity+"."+attributeMenu.name]:event.target.value})}/></label></div>{menuError&&<p className="designer-error" role="alert">{menuError}</p>}<footer><button type="button" className="modal-cancel" onClick={()=>setAttributeMenu(null)}>Cerrar</button><button type="button" className="inspector-danger" disabled={attributeDraft.primaryKey||tables.some(table=>table.foreignKeys.some(fk=>fk.table===attributeMenu.entity&&(fk.targetColumns??[]).includes(attributeMenu.name)))} onClick={()=>{if(deleteAttribute(attributeMenu.entity,attributeMenu.name))setAttributeMenu(null);else setMenuError("Este atributo pertenece a una clave relacionada y no se puede eliminar aquí.");}}>Eliminar atributo</button></footer></section></div>}
-    {dialog && <div className="designer-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) { setDialog(null); setEditingEntityName(null); } }}><section className="designer-modal" role="dialog" aria-modal="true" aria-labelledby="designer-modal-title"><header><div><h3 id="designer-modal-title">{dialog === "entity" ? editingEntityName ? "Editar entidad" : "Nueva entidad" : dialog === "weak" ? "Nueva entidad débil" : "Nueva interrelación"}</h3>{dialog !== "entity" && <p>{dialog === "weak" ? "Vincúlala a una entidad fuerte y define cómo se identifica." : "Elige sus extremos, cardinalidad y atributos."}</p>}</div><button type="button" aria-label="Cerrar" onClick={() => { setDialog(null); setEditingEntityName(null); }}>×</button></header>
-      {dialog === "entity" ? <div className="modal-content entity-builder-content"><section className="entity-preview-column"><h4>Vista previa</h4><EntityDraftPreview entityName={entityName} setEntityName={setEntityName} attributes={attributes} selectedAttribute={selectedDraftAttribute} onEditAttribute={index=>{setSelectedDraftAttribute(index);setEditingDraftAttribute(true);}}/><small>Selecciona un atributo del diagrama para editarlo.</small></section><section className="entity-attribute-editor"><header><div><h4>Atributos</h4><small>Haz clic en un punto para editarlo o agrega otro.</small></div><button type="button" className="add-draft-attribute" onClick={()=>{const index=attributes.length;setAttributes(current=>[...current,emptyAttribute("atributo_"+(current.length+1))]);setSelectedDraftAttribute(index);setEditingDraftAttribute(true);}}>＋ Crear atributo</button></header>{selectedDraft&&editingDraftAttribute&&<div className="selected-draft-editor"><div className="selected-draft-heading"><strong>{selectedDraft.primaryKey?"Clave primaria":"Editar atributo"}</strong>{!selectedDraft.primaryKey&&<button type="button" className="remove-selected-draft" aria-label="Eliminar atributo" onClick={()=>{setAttributes(current=>current.filter((_,i)=>i!==selectedDraftAttribute));setSelectedDraftAttribute(0);setEditingDraftAttribute(true);}}>Eliminar</button>}</div><label className="form-field">{selectedDraft.primaryKey?"Nombre de la PK":"Nombre"}<input autoFocus={!selectedDraft.primaryKey} value={selectedDraft.name} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{name:event.target.value})} placeholder="id"/></label>{!selectedDraft.primaryKey&&<><label className="form-field">Tipo<input value={selectedDraft.type} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{type:event.target.value})} placeholder="TEXT"/></label><div className="attribute-checks"><label><input type="checkbox" checked={selectedDraft.alternateKey} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{alternateKey:event.target.checked})}/> AK</label><label><input type="checkbox" checked={selectedDraft.unique} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{unique:event.target.checked})}/> UK</label><label><input type="checkbox" checked={selectedDraft.required} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{required:event.target.checked})}/> Obligatorio</label></div><details className="attribute-classifications" open><summary>Clasificación</summary><div className="attribute-checks classification-checks">{(["simple","derived","multivalued","composite","multivalued-composite"] as const).map(kind=><label key={kind}><input type="radio" name="entity-draft-classification" checked={selectedDraft.kind===kind} onChange={()=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{kind})}/>{{simple:"Simple",derived:"Derivado",multivalued:"Multivaluado",composite:"Compuesto","multivalued-composite":"Multivaluado compuesto"}[kind]}</label>)}</div>{(selectedDraft.kind==="composite"||selectedDraft.kind==="multivalued-composite")&&<label className="form-field">Componentes<input value={selectedDraft.parts} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{parts:event.target.value})} placeholder="nombre, apellido"/></label>}</details><label className="form-field">Dominio<input value={selectedDraft.domain} onChange={event=>selectedDraftAttribute!==null&&updateAttribute(selectedDraftAttribute,{domain:event.target.value})} placeholder="correo_electronico"/></label></>}</div>}</section></div> : dialog === "weak" ? <div className="modal-content entity-preview-form"><WeakEntityDraftPreview parent={weakDraft.parent} name={weakDraft.name} relationName={weakDraft.relationName} dependency={weakDraft.dependency} cardinality={weakDraft.cardinality} identifier={weakDraft.identifier} attributes={weakAttributes.map(attribute=>attribute.name||"atributo")}/><div className="entity-preview-fields"><label className="form-field">Nombre de la entidad débil<input autoFocus value={weakDraft.name} onChange={event => setWeakDraft(current => ({ ...current, name: event.target.value }))} placeholder="Familiar"/></label><label className="form-field">Entidad fuerte<select value={weakDraft.parent} onChange={event => setWeakDraft(current => ({ ...current, parent: event.target.value }))}><option value="">Seleccionar entidad fuerte</option>{tables.filter(table => table.primaryKey.length > 0).map(table => <option key={table.name} value={table.name}>{table.name}</option>)}</select></label><label className="form-field">Tipo de identificación<select value={weakDraft.dependency} onChange={event => setWeakDraft(current => ({ ...current, dependency: event.target.value as DependencyMark }))}><option value="E">Por existencia (E)</option><option value="ID">Por identificación (ID)</option></select></label><label className="form-field">Nombre de la relación<input value={weakDraft.relationName} onChange={event => setWeakDraft(current => ({ ...current, relationName: event.target.value }))} placeholder="pertenece"/></label><label className="form-field">Cardinalidad junto a la entidad débil<select value={weakDraft.cardinality} onChange={event => setWeakDraft(current => ({ ...current, cardinality: event.target.value as WeakCardinality }))}><option value="0:N">(0,n)</option><option value="1:N">(1,n)</option><option value="0:1">(0,1)</option><option value="1:1">(1,1)</option></select></label>{weakDraft.dependency === "E" ? <label className="form-field">{weakDraft.dependency === "E" ? "Nombre de la llave propia" : "Identificador parcial"}<input value={weakDraft.identifier} onChange={event => setWeakDraft(current => ({ ...current, identifier: event.target.value }))} placeholder={weakDraft.dependency === "E" ? "id" : "nro_linea"}/></label> : <small className="weak-id-hint">La PK de la entidad débil será la misma clave heredada de la entidad fuerte.</small>}<div className="attribute-draft-title"><strong>Atributos</strong></div><div className="attribute-draft-list">{weakAttributes.map((attribute,index)=><article className="attribute-draft" key={index}><div className="attribute-draft-main"><input aria-label="Nombre del atributo" value={attribute.name} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,name:event.target.value}:item))} placeholder="Nombre del atributo"/><input aria-label="Tipo de dato" value={attribute.type} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,type:event.target.value}:item))} placeholder="TEXT"/><button type="button" aria-label="Eliminar atributo" onClick={()=>setWeakAttributes(current=>current.filter((_,i)=>i!==index))}>×</button></div><div className="attribute-checks"><label><input type="checkbox" checked={attribute.alternateKey} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,alternateKey:event.target.checked}:item))}/> AK</label><label><input type="checkbox" checked={attribute.unique} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,unique:event.target.checked}:item))}/> UK</label><label><input type="checkbox" checked={attribute.required} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,required:event.target.checked}:item))}/> Obligatorio</label></div><label className="form-field domain-draft">Dominio<input value={attribute.domain} onChange={event=>setWeakAttributes(current=>current.map((item,i)=>i===index?{...item,domain:event.target.value}:item))} placeholder="Dominio"/></label></article>)}</div><button type="button" className="add-draft-attribute" onClick={()=>setWeakAttributes(current=>[...current,emptyAttribute(`atributo_${current.length+1}`)])}>＋ Añadir atributo</button></div></div> : <div className="modal-content entity-preview-form"><RelationDraftPreview mode={relationMode} onMode={changeRelationMode} source={relation.source} target={relation.target} additional={relation.additional} name={relation.name} setName={name=>setRelation(current=>({...current,name}))} attributes={relation.attributes} minimums={relation.minimums} maximums={relation.maximums} setCardinality={(index,min,max)=>setRelation(current=>({...current,minimums:current.minimums.map((item,i)=>i===index?min:item),maximums:current.maximums.map((item,i)=>i===index?max:item)}))} setSource={value=>setRelation(current=>({...current,source:value}))} setTarget={value=>setRelation(current=>({...current,target:value}))} setAdditional={setAdditionalParticipant} addParticipant={addParticipant} removeParticipant={removeParticipant} roles={relation.roles} setRole={(index,value)=>setRelation(current=>({...current,roles:current.roles.map((item,i)=>i===index?value:item) as [string,string]}))} entities={tables.map(table=>table.name)}/><div className="entity-preview-fields"><div className="form-field"><span>Atributos de la interrelación</span>{relation.attributes.map((attribute,index)=><div className="relation-attribute-row" key={index}><input aria-label={`Nombre del atributo ${index+1}`} value={attribute} onChange={event=>setRelation(current=>({...current,attributes:current.attributes.map((item,i)=>i===index?event.target.value:item)}))} placeholder="Nombre del atributo"/><button type="button" aria-label="Quitar atributo" onClick={()=>setRelation(current=>({...current,attributes:current.attributes.filter((_,i)=>i!==index)}))}>×</button></div>)}<button type="button" className="add-draft-attribute" onClick={()=>setRelation(current=>({...current,attributes:[...current.attributes,`atributo_${current.attributes.length+1}`]}))}>＋ Añadir atributo</button></div></div></div>}
-      {error && <p className="designer-error" role="alert">{error}</p>}<footer>{dialog === "entity" && editingEntityName && <button type="button" className="inspector-danger" onClick={() => { deleteEntity(editingEntityName); setDialog(null); setEditingEntityName(null); }}>Eliminar entidad</button>}<button type="button" className="modal-cancel" onClick={() => { setDialog(null); setEditingEntityName(null); }}>Cancelar</button><button type="button" className="modal-save" onClick={dialog === "entity" ? editingEntityName ? saveEditedEntity : saveEntity : dialog === "weak" ? saveWeakEntity : saveRelation}>{dialog === "entity" ? editingEntityName ? "Guardar cambios" : "Crear entidad" : dialog === "weak" ? "Crear entidad débil" : "Crear interrelación"}</button></footer>
-    </section></div>}
-  </div>;
+  return (
+    <div className="designer tool-palette">
+      <header className="designer-heading">
+        <div>
+          <h2>Herramientas del modelo</h2>
+          <p>Selecciona una figura para agregarla al diagrama.</p>
+        </div>
+      </header>
+      <div className="model-tools">
+        <button type="button" className="model-tool" onClick={openEntity}>
+          <span className="tool-shape entity-shape" aria-hidden="true" />
+          <span>
+            <strong>Entidad</strong>
+            <small>Crear entidad y clasificar atributos</small>
+          </span>
+          <b>＋</b>
+        </button>
+        <button
+          type="button"
+          className="model-tool"
+          onClick={openWeakEntity}
+          disabled={!tables.some((table) => table.primaryKey.length > 0)}
+        >
+          <span className="tool-shape weak-entity-shape" aria-hidden="true" />
+          <span>
+            <strong>Entidad débil</strong>
+            <small>Depende de una entidad fuerte · Ex o Id</small>
+          </span>
+          <b>＋</b>
+        </button>
+        <button
+          type="button"
+          className="model-tool"
+          onClick={openRelation}
+          disabled={tables.length === 0}
+        >
+          <span className="tool-shape relation-shape" aria-hidden="true" />
+          <span>
+            <strong>Interrelación</strong>
+            <small>
+              {tables.length
+                ? "Conectar entidades, incluso consigo mismas"
+                : "Crea una entidad para habilitar esta opción"}
+            </small>
+          </span>
+          <b>＋</b>
+        </button>
+        <button
+          type="button"
+          className="model-tool"
+          onClick={requestHierarchy}
+          disabled={hierarchyEntityCount < 3}
+        >
+          <span className="tool-shape hierarchy-shape" aria-hidden="true" />
+          <span>
+            <strong>Herencia</strong>
+            <small>Requiere tres entidades: un supertipo y dos subtipos</small>
+          </span>
+          <b>＋</b>
+        </button>
+      </div>
+      <button
+        type="button"
+        className="arrange-model"
+        title="Reordena las entidades y ajusta el zoom para mostrar el diagrama completo"
+        onClick={requestArrange}
+        disabled={tables.length < 2}
+      >
+        ✦ Ordenar y ajustar MER
+      </button>
+      <div className="palette-summary">
+        <strong>
+          {tables.length} {tables.length === 1 ? "entidad" : "entidades"}
+        </strong>
+        <div className="entity-card-list">
+          {tables.map((table) => (
+            <details className="entity-card" key={table.name}>
+              <summary onDoubleClick={() => openEntityMenu(table.name)}>
+                <span>
+                  <strong>{table.name}</strong>
+                  <small>
+                    {table.columns.length} {table.columns.length === 1 ? "atributo" : "atributos"}
+                  </small>
+                </span>
+                <small>Doble clic para editar</small>
+              </summary>
+              <div className="entity-card-attributes">
+                {table.columns.map((column) => (
+                  <div
+                    className="entity-attribute-card"
+                    key={column.name}
+                    onDoubleClick={() => openAttributeMenu(table.name, column)}
+                  >
+                    <span>
+                      <strong>{column.name}</strong>
+                      <small>
+                        {column.type}
+                        {column.primaryKey ? " · PK" : ""}
+                        {column.alternateKey ? " · AK" : ""}
+                        {column.unique ? " · UK" : ""}
+                        {!column.nullable ? " · NOT NULL" : ""}
+                      </small>
+                    </span>
+                    <button type="button" onClick={() => openAttributeMenu(table.name, column)}>
+                      Editar
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="add-draft-attribute"
+                  onClick={() => {
+                    const name = addAttribute(table.name);
+                    if (name) {
+                      const added = table.columns.find((column) => column.name === name) ?? {
+                        name,
+                        type: "TEXT",
+                        nullable: true,
+                        primaryKey: false,
+                        unique: false,
+                      };
+                      openAttributeMenu(table.name, added);
+                    }
+                  }}
+                >
+                  ＋ Añadir atributo
+                </button>
+              </div>
+            </details>
+          ))}
+        </div>
+      </div>
+      {entityMenu && tables.find((table) => table.name === entityMenu) && (
+        <div
+          className="designer-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEntityMenu(null);
+          }}
+        >
+          <section
+            className="designer-modal mini-editor-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Editar entidad"
+          >
+            <header>
+              <div>
+                <h3>Editar entidad</h3>
+                <p>{entityMenu}</p>
+              </div>
+              <button type="button" aria-label="Cerrar" onClick={() => setEntityMenu(null)}>
+                ×
+              </button>
+            </header>
+            <div className="modal-content">
+              <label className="form-field">
+                Nombre de la entidad
+                <input
+                  autoFocus
+                  value={entityNameDraft}
+                  onChange={(event) => setEntityNameDraft(event.target.value)}
+                />
+              </label>
+            </div>
+            {menuError && (
+              <p className="designer-error" role="alert">
+                {menuError}
+              </p>
+            )}
+            <footer>
+              <button type="button" className="modal-cancel" onClick={() => setEntityMenu(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="inspector-danger"
+                onClick={() => {
+                  deleteEntity(entityMenu);
+                  setEntityMenu(null);
+                }}
+              >
+                Eliminar entidad
+              </button>
+              <button
+                type="button"
+                className="modal-save"
+                onClick={() => {
+                  if (renameEntity(entityMenu, entityNameDraft)) {
+                    setEntityMenu(entityNameDraft.trim());
+                  }
+                }}
+              >
+                Guardar
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {attributeMenu && attributeDraft && (
+        <div
+          className="designer-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setAttributeMenu(null);
+          }}
+        >
+          <section
+            className="designer-modal mini-editor-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Editar atributo"
+          >
+            <header>
+              <div>
+                <h3>Editar atributo</h3>
+                <p>
+                  {attributeMenu.entity} · {attributeMenu.name}
+                </p>
+              </div>
+              <button type="button" aria-label="Cerrar" onClick={() => setAttributeMenu(null)}>
+                ×
+              </button>
+            </header>
+            <div className="modal-content">
+              <label className="form-field">
+                Nombre
+                <input
+                  autoFocus
+                  value={attributeDraft.name}
+                  onChange={(event) => updateCurrentAttribute({ name: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                Tipo
+                <input
+                  value={attributeDraft.type}
+                  onChange={(event) => updateCurrentAttribute({ type: event.target.value })}
+                />
+              </label>
+              <div className="attribute-checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(attributeDraft.alternateKey)}
+                    onChange={(event) =>
+                      updateCurrentAttribute({ alternateKey: event.target.checked })
+                    }
+                  />{" "}
+                  AK
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(attributeDraft.unique)}
+                    onChange={(event) => updateCurrentAttribute({ unique: event.target.checked })}
+                  />{" "}
+                  UK
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!attributeDraft.nullable}
+                    onChange={(event) =>
+                      updateCurrentAttribute({ nullable: !event.target.checked })
+                    }
+                  />{" "}
+                  Obligatorio
+                </label>
+              </div>
+              <details className="attribute-classifications">
+                <summary>Clasificación</summary>
+                <div className="attribute-checks classification-checks">
+                  {(
+                    [
+                      "simple",
+                      "derived",
+                      "multivalued",
+                      "composite",
+                      "multivalued-composite",
+                      "optional",
+                    ] as const
+                  ).map((kind) => (
+                    <label key={kind}>
+                      <input
+                        type="radio"
+                        name="sidebar-attribute-kind"
+                        checked={
+                          (attributeMarks[attributeMenu.entity + "." + attributeMenu.name]?.kind ??
+                            "simple") === kind
+                        }
+                        onChange={() => updateAttributeMark(kind)}
+                      />
+                      {
+                        {
+                          simple: "Simple",
+                          derived: "Derivado",
+                          multivalued: "Multivaluado",
+                          composite: "Compuesto",
+                          "multivalued-composite": "Multivaluado compuesto",
+                          optional: "Opcional",
+                        }[kind]
+                      }
+                    </label>
+                  ))}
+                </div>
+              </details>
+              {(["composite", "multivalued-composite"] as const).includes(
+                attributeMarks[attributeMenu.entity + "." + attributeMenu.name]?.kind as
+                  "composite" | "multivalued-composite",
+              ) && (
+                <label className="form-field">
+                  Componentes
+                  <input
+                    value={
+                      attributeMarks[attributeMenu.entity + "." + attributeMenu.name]?.parts.join(
+                        ", ",
+                      ) ?? ""
+                    }
+                    onChange={(event) => {
+                      const key = attributeMenu.entity + "." + attributeMenu.name;
+                      setAttributeMarks({
+                        ...attributeMarks,
+                        [key]: {
+                          kind: attributeMarks[key]?.kind ?? "composite",
+                          parts: event.target.value
+                            .split(",")
+                            .map((part) => part.trim())
+                            .filter(Boolean),
+                        },
+                      });
+                    }}
+                    placeholder="nombre, apellido"
+                  />
+                </label>
+              )}
+              <label className="form-field">
+                Dominio
+                <input
+                  value={domains[attributeMenu.entity + "." + attributeMenu.name] ?? ""}
+                  onChange={(event) =>
+                    setDomains({
+                      ...domains,
+                      [attributeMenu.entity + "." + attributeMenu.name]: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+            {menuError && (
+              <p className="designer-error" role="alert">
+                {menuError}
+              </p>
+            )}
+            <footer>
+              <button type="button" className="modal-cancel" onClick={() => setAttributeMenu(null)}>
+                Cerrar
+              </button>
+              <button
+                type="button"
+                className="inspector-danger"
+                disabled={
+                  attributeDraft.primaryKey ||
+                  tables.some((table) =>
+                    table.foreignKeys.some(
+                      (fk) =>
+                        fk.table === attributeMenu.entity &&
+                        (fk.targetColumns ?? []).includes(attributeMenu.name),
+                    ),
+                  )
+                }
+                onClick={() => {
+                  if (deleteAttribute(attributeMenu.entity, attributeMenu.name))
+                    setAttributeMenu(null);
+                  else
+                    setMenuError(
+                      "Este atributo pertenece a una clave relacionada y no se puede eliminar aquí.",
+                    );
+                }}
+              >
+                Eliminar atributo
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {dialog && (
+        <div
+          className="designer-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDialog(null);
+              setEditingEntityName(null);
+            }
+          }}
+        >
+          <section
+            className="designer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="designer-modal-title"
+          >
+            <header>
+              <div>
+                <h3 id="designer-modal-title">
+                  {dialog === "entity"
+                    ? editingEntityName
+                      ? "Editar entidad"
+                      : "Nueva entidad"
+                    : dialog === "weak"
+                      ? "Nueva entidad débil"
+                      : "Nueva interrelación"}
+                </h3>
+                {dialog !== "entity" && (
+                  <p>
+                    {dialog === "weak"
+                      ? "Vincúlala a una entidad fuerte y define cómo se identifica."
+                      : "Elige sus extremos, cardinalidad y atributos."}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                aria-label="Cerrar"
+                onClick={() => {
+                  setDialog(null);
+                  setEditingEntityName(null);
+                }}
+              >
+                ×
+              </button>
+            </header>
+            {dialog === "entity" ? (
+              <div className="modal-content entity-builder-content">
+                <section className="entity-preview-column">
+                  <h4>Vista previa</h4>
+                  <EntityDraftPreview
+                    entityName={entityName}
+                    setEntityName={setEntityName}
+                    attributes={attributes}
+                    selectedAttribute={selectedDraftAttribute}
+                    onEditAttribute={(index) => {
+                      setSelectedDraftAttribute(index);
+                      setEditingDraftAttribute(true);
+                    }}
+                  />
+                  <small>Selecciona un atributo del diagrama para editarlo.</small>
+                </section>
+                <section className="entity-attribute-editor">
+                  <header>
+                    <div>
+                      <h4>Atributos</h4>
+                      <small>Haz clic en un punto para editarlo o agrega otro.</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="add-draft-attribute"
+                      onClick={() => {
+                        const index = attributes.length;
+                        setAttributes((current) => [
+                          ...current,
+                          emptyAttribute("atributo_" + (current.length + 1)),
+                        ]);
+                        setSelectedDraftAttribute(index);
+                        setEditingDraftAttribute(true);
+                      }}
+                    >
+                      ＋ Crear atributo
+                    </button>
+                  </header>
+                  {selectedDraft && editingDraftAttribute && (
+                    <div className="selected-draft-editor">
+                      <div className="selected-draft-heading">
+                        <strong>
+                          {selectedDraft.primaryKey ? "Clave primaria" : "Editar atributo"}
+                        </strong>
+                        {!selectedDraft.primaryKey && (
+                          <button
+                            type="button"
+                            className="remove-selected-draft"
+                            aria-label="Eliminar atributo"
+                            onClick={() => {
+                              setAttributes((current) =>
+                                current.filter((_, i) => i !== selectedDraftAttribute),
+                              );
+                              setSelectedDraftAttribute(0);
+                              setEditingDraftAttribute(true);
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                      <label className="form-field">
+                        {selectedDraft.primaryKey ? "Nombre de la PK" : "Nombre"}
+                        <input
+                          autoFocus={!selectedDraft.primaryKey}
+                          value={selectedDraft.name}
+                          onChange={(event) =>
+                            selectedDraftAttribute !== null &&
+                            updateAttribute(selectedDraftAttribute, { name: event.target.value })
+                          }
+                          placeholder="id"
+                        />
+                      </label>
+                      {!selectedDraft.primaryKey && (
+                        <>
+                          <label className="form-field">
+                            Tipo
+                            <input
+                              value={selectedDraft.type}
+                              onChange={(event) =>
+                                selectedDraftAttribute !== null &&
+                                updateAttribute(selectedDraftAttribute, {
+                                  type: event.target.value,
+                                })
+                              }
+                              placeholder="TEXT"
+                            />
+                          </label>
+                          <div className="attribute-checks">
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={selectedDraft.alternateKey}
+                                onChange={(event) =>
+                                  selectedDraftAttribute !== null &&
+                                  updateAttribute(selectedDraftAttribute, {
+                                    alternateKey: event.target.checked,
+                                  })
+                                }
+                              />{" "}
+                              AK
+                            </label>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={selectedDraft.unique}
+                                onChange={(event) =>
+                                  selectedDraftAttribute !== null &&
+                                  updateAttribute(selectedDraftAttribute, {
+                                    unique: event.target.checked,
+                                  })
+                                }
+                              />{" "}
+                              UK
+                            </label>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={selectedDraft.required}
+                                onChange={(event) =>
+                                  selectedDraftAttribute !== null &&
+                                  updateAttribute(selectedDraftAttribute, {
+                                    required: event.target.checked,
+                                  })
+                                }
+                              />{" "}
+                              Obligatorio
+                            </label>
+                          </div>
+                          <details className="attribute-classifications" open>
+                            <summary>Clasificación</summary>
+                            <div className="attribute-checks classification-checks">
+                              {(
+                                [
+                                  "simple",
+                                  "derived",
+                                  "multivalued",
+                                  "composite",
+                                  "multivalued-composite",
+                                ] as const
+                              ).map((kind) => (
+                                <label key={kind}>
+                                  <input
+                                    type="radio"
+                                    name="entity-draft-classification"
+                                    checked={selectedDraft.kind === kind}
+                                    onChange={() =>
+                                      selectedDraftAttribute !== null &&
+                                      updateAttribute(selectedDraftAttribute, { kind })
+                                    }
+                                  />
+                                  {
+                                    {
+                                      simple: "Simple",
+                                      derived: "Derivado",
+                                      multivalued: "Multivaluado",
+                                      composite: "Compuesto",
+                                      "multivalued-composite": "Multivaluado compuesto",
+                                    }[kind]
+                                  }
+                                </label>
+                              ))}
+                            </div>
+                            {(selectedDraft.kind === "composite" ||
+                              selectedDraft.kind === "multivalued-composite") && (
+                              <label className="form-field">
+                                Componentes
+                                <input
+                                  value={selectedDraft.parts}
+                                  onChange={(event) =>
+                                    selectedDraftAttribute !== null &&
+                                    updateAttribute(selectedDraftAttribute, {
+                                      parts: event.target.value,
+                                    })
+                                  }
+                                  placeholder="nombre, apellido"
+                                />
+                              </label>
+                            )}
+                          </details>
+                          <label className="form-field">
+                            Dominio
+                            <input
+                              value={selectedDraft.domain}
+                              onChange={(event) =>
+                                selectedDraftAttribute !== null &&
+                                updateAttribute(selectedDraftAttribute, {
+                                  domain: event.target.value,
+                                })
+                              }
+                              placeholder="correo_electronico"
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </section>
+              </div>
+            ) : dialog === "weak" ? (
+              <div className="modal-content entity-preview-form">
+                <WeakEntityDraftPreview
+                  parent={weakDraft.parent}
+                  name={weakDraft.name}
+                  relationName={weakDraft.relationName}
+                  dependency={weakDraft.dependency}
+                  cardinality={weakDraft.cardinality}
+                  identifier={weakDraft.identifier}
+                  attributes={weakAttributes.map((attribute) => attribute.name || "atributo")}
+                />
+                <div className="entity-preview-fields">
+                  <label className="form-field">
+                    Nombre de la entidad débil
+                    <input
+                      autoFocus
+                      value={weakDraft.name}
+                      onChange={(event) =>
+                        setWeakDraft((current) => ({ ...current, name: event.target.value }))
+                      }
+                      placeholder="Familiar"
+                    />
+                  </label>
+                  <label className="form-field">
+                    Entidad fuerte
+                    <select
+                      value={weakDraft.parent}
+                      onChange={(event) =>
+                        setWeakDraft((current) => ({ ...current, parent: event.target.value }))
+                      }
+                    >
+                      <option value="">Seleccionar entidad fuerte</option>
+                      {tables
+                        .filter((table) => table.primaryKey.length > 0)
+                        .map((table) => (
+                          <option key={table.name} value={table.name}>
+                            {table.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    Tipo de identificación
+                    <select
+                      value={weakDraft.dependency}
+                      onChange={(event) =>
+                        setWeakDraft((current) => ({
+                          ...current,
+                          dependency: event.target.value as DependencyMark,
+                        }))
+                      }
+                    >
+                      <option value="E">Por existencia (E)</option>
+                      <option value="ID">Por identificación (ID)</option>
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    Nombre de la relación
+                    <input
+                      value={weakDraft.relationName}
+                      onChange={(event) =>
+                        setWeakDraft((current) => ({
+                          ...current,
+                          relationName: event.target.value,
+                        }))
+                      }
+                      placeholder="pertenece"
+                    />
+                  </label>
+                  <label className="form-field">
+                    Cardinalidad junto a la entidad débil
+                    <select
+                      value={weakDraft.cardinality}
+                      onChange={(event) =>
+                        setWeakDraft((current) => ({
+                          ...current,
+                          cardinality: event.target.value as WeakCardinality,
+                        }))
+                      }
+                    >
+                      <option value="0:N">(0,n)</option>
+                      <option value="1:N">(1,n)</option>
+                      <option value="0:1">(0,1)</option>
+                      <option value="1:1">(1,1)</option>
+                    </select>
+                  </label>
+                  {weakDraft.dependency === "E" ? (
+                    <label className="form-field">
+                      {weakDraft.dependency === "E"
+                        ? "Nombre de la llave propia"
+                        : "Identificador parcial"}
+                      <input
+                        value={weakDraft.identifier}
+                        onChange={(event) =>
+                          setWeakDraft((current) => ({
+                            ...current,
+                            identifier: event.target.value,
+                          }))
+                        }
+                        placeholder={weakDraft.dependency === "E" ? "id" : "nro_linea"}
+                      />
+                    </label>
+                  ) : (
+                    <small className="weak-id-hint">
+                      La PK de la entidad débil será la misma clave heredada de la entidad fuerte.
+                    </small>
+                  )}
+                  <div className="attribute-draft-title">
+                    <strong>Atributos</strong>
+                  </div>
+                  <div className="attribute-draft-list">
+                    {weakAttributes.map((attribute, index) => (
+                      <article className="attribute-draft" key={index}>
+                        <div className="attribute-draft-main">
+                          <input
+                            aria-label="Nombre del atributo"
+                            value={attribute.name}
+                            onChange={(event) =>
+                              setWeakAttributes((current) =>
+                                current.map((item, i) =>
+                                  i === index ? { ...item, name: event.target.value } : item,
+                                ),
+                              )
+                            }
+                            placeholder="Nombre del atributo"
+                          />
+                          <input
+                            aria-label="Tipo de dato"
+                            value={attribute.type}
+                            onChange={(event) =>
+                              setWeakAttributes((current) =>
+                                current.map((item, i) =>
+                                  i === index ? { ...item, type: event.target.value } : item,
+                                ),
+                              )
+                            }
+                            placeholder="TEXT"
+                          />
+                          <button
+                            type="button"
+                            aria-label="Eliminar atributo"
+                            onClick={() =>
+                              setWeakAttributes((current) => current.filter((_, i) => i !== index))
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="attribute-checks">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={attribute.alternateKey}
+                              onChange={(event) =>
+                                setWeakAttributes((current) =>
+                                  current.map((item, i) =>
+                                    i === index
+                                      ? { ...item, alternateKey: event.target.checked }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />{" "}
+                            AK
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={attribute.unique}
+                              onChange={(event) =>
+                                setWeakAttributes((current) =>
+                                  current.map((item, i) =>
+                                    i === index ? { ...item, unique: event.target.checked } : item,
+                                  ),
+                                )
+                              }
+                            />{" "}
+                            UK
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={attribute.required}
+                              onChange={(event) =>
+                                setWeakAttributes((current) =>
+                                  current.map((item, i) =>
+                                    i === index
+                                      ? { ...item, required: event.target.checked }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />{" "}
+                            Obligatorio
+                          </label>
+                        </div>
+                        <label className="form-field domain-draft">
+                          Dominio
+                          <input
+                            value={attribute.domain}
+                            onChange={(event) =>
+                              setWeakAttributes((current) =>
+                                current.map((item, i) =>
+                                  i === index ? { ...item, domain: event.target.value } : item,
+                                ),
+                              )
+                            }
+                            placeholder="Dominio"
+                          />
+                        </label>
+                      </article>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="add-draft-attribute"
+                    onClick={() =>
+                      setWeakAttributes((current) => [
+                        ...current,
+                        emptyAttribute(`atributo_${current.length + 1}`),
+                      ])
+                    }
+                  >
+                    ＋ Añadir atributo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="modal-content entity-preview-form">
+                <RelationDraftPreview
+                  mode={relationMode}
+                  onMode={changeRelationMode}
+                  source={relation.source}
+                  target={relation.target}
+                  additional={relation.additional}
+                  name={relation.name}
+                  setName={(name) => setRelation((current) => ({ ...current, name }))}
+                  attributes={relation.attributes}
+                  minimums={relation.minimums}
+                  maximums={relation.maximums}
+                  setCardinality={(index, min, max) =>
+                    setRelation((current) => ({
+                      ...current,
+                      minimums: current.minimums.map((item, i) => (i === index ? min : item)),
+                      maximums: current.maximums.map((item, i) => (i === index ? max : item)),
+                    }))
+                  }
+                  setSource={(value) => setRelation((current) => ({ ...current, source: value }))}
+                  setTarget={(value) => setRelation((current) => ({ ...current, target: value }))}
+                  setAdditional={setAdditionalParticipant}
+                  addParticipant={addParticipant}
+                  removeParticipant={removeParticipant}
+                  roles={relation.roles}
+                  setRole={(index, value) =>
+                    setRelation((current) => ({
+                      ...current,
+                      roles: current.roles.map((item, i) => (i === index ? value : item)) as [
+                        string,
+                        string,
+                      ],
+                    }))
+                  }
+                  entities={tables.map((table) => table.name)}
+                />
+                <div className="entity-preview-fields">
+                  <div className="form-field">
+                    <span>Atributos de la interrelación</span>
+                    {relation.attributes.map((attribute, index) => (
+                      <div className="relation-attribute-row" key={index}>
+                        <input
+                          aria-label={`Nombre del atributo ${index + 1}`}
+                          value={attribute}
+                          onChange={(event) =>
+                            setRelation((current) => ({
+                              ...current,
+                              attributes: current.attributes.map((item, i) =>
+                                i === index ? event.target.value : item,
+                              ),
+                            }))
+                          }
+                          placeholder="Nombre del atributo"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Quitar atributo"
+                          onClick={() =>
+                            setRelation((current) => ({
+                              ...current,
+                              attributes: current.attributes.filter((_, i) => i !== index),
+                            }))
+                          }
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="add-draft-attribute"
+                      onClick={() =>
+                        setRelation((current) => ({
+                          ...current,
+                          attributes: [
+                            ...current.attributes,
+                            `atributo_${current.attributes.length + 1}`,
+                          ],
+                        }))
+                      }
+                    >
+                      ＋ Añadir atributo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {error && (
+              <p className="designer-error" role="alert">
+                {error}
+              </p>
+            )}
+            <footer>
+              {dialog === "entity" && editingEntityName && (
+                <button
+                  type="button"
+                  className="inspector-danger"
+                  onClick={() => {
+                    deleteEntity(editingEntityName);
+                    setDialog(null);
+                    setEditingEntityName(null);
+                  }}
+                >
+                  Eliminar entidad
+                </button>
+              )}
+              <button
+                type="button"
+                className="modal-cancel"
+                onClick={() => {
+                  setDialog(null);
+                  setEditingEntityName(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="modal-save"
+                onClick={
+                  dialog === "entity"
+                    ? editingEntityName
+                      ? saveEditedEntity
+                      : saveEntity
+                    : dialog === "weak"
+                      ? saveWeakEntity
+                      : saveRelation
+                }
+              >
+                {dialog === "entity"
+                  ? editingEntityName
+                    ? "Guardar cambios"
+                    : "Crear entidad"
+                  : dialog === "weak"
+                    ? "Crear entidad débil"
+                    : "Crear interrelación"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }

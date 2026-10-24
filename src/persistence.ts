@@ -13,7 +13,10 @@ function readStoredValue<T>(key: string, fallback: T): T {
   }
 }
 
-export function usePersistentState<T>(key: string, initialValue: T): [T, Dispatch<SetStateAction<T>>] {
+export function usePersistentState<T>(
+  key: string,
+  initialValue: T,
+): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => readStoredValue(key, initialValue));
 
   useEffect(() => {

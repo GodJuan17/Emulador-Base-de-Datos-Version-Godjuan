@@ -1,0 +1,208 @@
+.diagram-actions button.tool-active {
+  border-color: #59889a;
+  background: #eaf3f5;
+  color: #2e6377;
+}
+.diagram-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.diagram-svg.relationship-mode {
+  cursor: crosshair;
+}
+.relation-preview {
+  stroke: #467e91;
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  pointer-events: none;
+  marker-end: url(#arrow);
+}
+.inspector-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attribute-edit-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.attribute-edit-fields .attribute-checks {
+  grid-column: 1/-1;
+  margin: 0;
+}
+.diagram-inspector .inspector-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.designer-modal .domain-draft {
+  margin-top: -4px;
+}
+.diagram-mini-menu {
+  width: min(500px, 100%);
+  max-height: min(82vh, 680px);
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px 18px;
+}
+.diagram-mini-menu > header {
+  position: sticky;
+  top: -16px;
+  z-index: 1;
+  margin: -16px -18px 0;
+  padding: 14px 18px;
+  background: #fff;
+}
+.diagram-mini-menu .inspector-field,
+.diagram-mini-menu > label {
+  display: grid;
+  gap: 5px;
+  color: #62747c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.diagram-mini-menu .inspector-field input,
+.diagram-mini-menu select,
+.diagram-mini-menu input:not([type="checkbox"]) {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  border: 1px solid #d8e2e5;
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: white;
+  color: #344f5b;
+  font:
+    12px "DM Sans",
+    sans-serif;
+}
+.diagram-mini-menu fieldset {
+  margin: 0;
+  border: 1px solid #e0e8ea;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.diagram-mini-menu legend {
+  padding: 0 4px;
+  color: #70838a;
+  font-size: 11px;
+}
+.mini-menu-backdrop {
+  z-index: 50;
+}
+.diagram-mini-menu > header > div {
+  display: grid;
+  gap: 3px;
+}
+.diagram-mini-menu > header h3 {
+  margin: 0;
+  color: #2f4c57;
+  font-size: 16px;
+}
+.diagram-mini-menu > header p {
+  margin: 0;
+  color: #849399;
+  font-size: 11px;
+}
+.diagram-mini-menu > header button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e1e8e9;
+  border-radius: 7px;
+  background: #fff;
+  color: #71838a;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+.diagram-mini-menu .attribute-classifications {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.diagram-mini-menu .attribute-classifications > summary {
+  cursor: pointer;
+  color: #607780;
+  font-size: 11px;
+  font-weight: 600;
+}
+.diagram-mini-menu .attribute-classifications[open] > summary {
+  margin-bottom: 8px;
+}
+.diagram-mini-menu .attribute-classifications .symbol-choices {
+  gap: 6px;
+}
+.dependency-divider {
+  stroke: #638595;
+  stroke-width: 1.3;
+  pointer-events: none;
+}
+.dependency-mark {
+  font-size: 8px;
+  font-weight: 700;
+  fill: #587583;
+  pointer-events: none;
+}
+.weak-id-hint {
+  display: block;
+  color: #607780;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.hierarchy-cardinality {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #687f89;
+  paint-order: stroke fill;
+  stroke: #fbfcfc;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.cardinality {
+  paint-order: stroke fill;
+  stroke: #fbfcfc;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.exercise-statement {
+  margin: 8px 13px 0;
+  border: 1px solid #e0e8ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+.exercise-statement > summary {
+  cursor: pointer;
+  color: #536d78;
+  font-size: 11px;
+  font-weight: 700;
+}
+.exercise-statement > textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #dce4e6;
+  border-radius: 7px;
+  resize: vertical;
+  color: #344952;
+  font:
+    12px/1.5 "DM Sans",
+    sans-serif;
+}
+.exercise-statement > textarea:focus {
+  outline: 2px solid #b7d1da;
+  border-color: #6e9aaa;
+}
+.diagram-export-bar {
+  padding-top: 6px;
+}

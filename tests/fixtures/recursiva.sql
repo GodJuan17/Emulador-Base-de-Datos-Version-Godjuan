@@ -1,0 +1,5 @@
+CREATE TABLE Empleado (
+  id INTEGER PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL,
+  supervisor_id INTEGER REFERENCES Empleado(id) ON DELETE SET NULL
+);

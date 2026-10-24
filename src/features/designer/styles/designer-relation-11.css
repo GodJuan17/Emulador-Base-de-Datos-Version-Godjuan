@@ -1,0 +1,223 @@
+@media (max-width: 760px) {
+  .relation-binary-layout {
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+    gap: clamp(18px, 5vw, 32px);
+    padding-inline: 0;
+  }
+  .relation-entity-picker {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 5px;
+    font-size: 9px;
+  }
+  .relation-diamond {
+    width: 76px;
+    height: 76px;
+  }
+  .relation-diamond::before {
+    width: 54px;
+    height: 54px;
+  }
+  .relation-diamond-text {
+    width: 76px;
+  }
+  .relation-kind-badge {
+    font-size: 10px;
+  }
+}
+.entity-preview-diagram {
+  aspect-ratio: 800/460;
+}
+.entity-preview-diagram .entity-preview-name {
+  width: min(22%, 170px);
+  height: 30px;
+  padding: 4px;
+  background: transparent;
+  font-size: 15px;
+}
+.entity-preview-diagram .entity-preview-name:focus {
+  background: #fff;
+}
+.entity-attribute-editor .attribute-editor-empty {
+  padding: 22px 14px;
+  border: 1px dashed #c7d7dc;
+  border-radius: 9px;
+  color: #748a93;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.draft-preview-selection-ring {
+  display: none;
+}
+.draft-preview-selection-reticle {
+  fill: none;
+  stroke: #56899c;
+  stroke-width: 1.6;
+  stroke-dasharray: 2 2;
+  stroke-linecap: round;
+  stroke-linejoin: miter;
+  pointer-events: none;
+}
+.draft-preview-selected .draft-preview-label {
+  font-weight: 400;
+  fill: #526e78;
+}
+.draft-preview-selectable:focus,
+.draft-preview-selectable:focus-visible,
+.draft-preview-selected:focus,
+.draft-preview-selected:focus-visible {
+  outline: none;
+}
+.relation-recursive-stage {
+  grid-template-columns: 32% minmax(0, 1fr) 88px;
+}
+.relation-recursive-stage::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 16%;
+  right: 44px;
+  border: 1.5px solid #77939d;
+  pointer-events: none;
+}
+.relation-recursive-stage {
+  grid-template-columns: 32% minmax(0, 1fr) 88px;
+}
+.relation-recursive-stage::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 16%;
+  right: 44px;
+  border: 1.5px solid #77939d;
+  pointer-events: none;
+}
+.recursive-card {
+  position: absolute;
+  z-index: 3;
+  left: calc(58% - 22px);
+  transform: translate(-50%, -50%);
+}
+.recursive-card.top {
+  top: 10px;
+}
+.recursive-card.bottom {
+  bottom: 10px;
+  transform: translate(-50%, 50%);
+}
+
+/* Botón de tipo de interrelación */
+.relation-kind-badge {
+  white-space: nowrap;
+}
+.relation-preview-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.relation-mode-switch {
+  display: flex;
+  padding: 3px;
+  border: 1px solid #dde6e8;
+  border-radius: 9px;
+  background: #fff;
+}
+.relation-mode-switch button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 7px 10px;
+  color: #708087;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.relation-mode-switch button[aria-pressed="true"] {
+  background: #e9f1f3;
+  color: #3e697b;
+}
+.relation-mode-switch button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* N-aria (3 o 4 entidades) */
+.relation-nary-preview {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.relation-nary-stage {
+  position: relative;
+  width: 100%;
+  height: 340px;
+}
+.relation-nary-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.relation-nary-node {
+  position: absolute;
+  width: min(140px, 38%);
+  transform: translate(-50%, -50%);
+}
+.relation-nary-node .relation-entity-picker {
+  width: 100%;
+}
+.relation-nary-node .relation-cardinality-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.relation-nary-node.top .relation-cardinality-wrap {
+  top: calc(100% + 8px);
+}
+.relation-nary-node.bottom .relation-cardinality-wrap {
+  bottom: calc(100% + 8px);
+}
+.relation-nary-node.bottom .relation-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.relation-nary-remove {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #dce6e9;
+  border-radius: 50%;
+  background: #fff;
+  color: #a87979;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.relation-nary-stage > .relation-diamond-wrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+}
+.relation-nary-stage .relation-kind-badge {
+  display: none;
+}
+.relation-nary-stage > .relation-nary-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}

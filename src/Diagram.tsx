@@ -1,8 +1,32 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
-import type { AttributeMark, DiagramModel, Entity, Relation, RelationDraft } from "./model";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type {
+  AttributeMark,
+  DiagramModel,
+  Entity,
+  Hierarchy,
+  Relation,
+  RelationDraft,
+} from "./model";
+import { sameName } from "./domain/names";
 import type { Column, WeakCardinality } from "./parser/ddlParser";
-import { usePersistentState } from "./persistence";
-type Props = {
+import type { CanvasPositions, CanvasView } from "./state/appState";
+import { point, attributePosition, attributePoint } from "./features/conceptual-diagram/geometry";
+import { orthogonalAttributeRoute } from "./features/conceptual-diagram/attributeRouting";
+import { calculateLayout } from "./features/conceptual-diagram/layout";
+import { exportSvgAsPdf } from "./features/export-pdf/exportSvgAsPdf";
+import {
+  ConceptualEntityNode,
+  HierarchyNode,
+  RelationshipNode,
+} from "./features/conceptual-diagram/components";
+import { HierarchyCreateDialog } from "./features/conceptual-diagram/modals/HierarchyCreateDialog";
+import { RelationCreateDialog } from "./features/conceptual-diagram/modals/RelationCreateDialog";
+import { EntityEditDialog } from "./features/conceptual-diagram/modals/EntityEditDialog";
+import { AttributeEditDialog } from "./features/conceptual-diagram/modals/AttributeEditDialog";
+import { RelationEditDialog } from "./features/conceptual-diagram/modals/RelationEditDialog";
+import { HierarchyEditDialog } from "./features/conceptual-diagram/modals/HierarchyEditDialog";
+import { useDiagramPointerHandlers } from "./features/conceptual-diagram/useDiagramPointerHandlers";
+export type DiagramProps = {
   model: DiagramModel;
   conceptual: boolean;
   exerciseStatement: string;
@@ -27,881 +51,22 @@ type Props = {
   renameEntity: (oldName: string, newName: string) => boolean;
   requestEntityEdit: (name: string, attribute?: string) => void;
   entityRenameRequest?: { oldName: string; newName: string; token: number } | null;
+  hierarchies: Hierarchy[];
+  setHierarchies: Dispatch<SetStateAction<Hierarchy[]>>;
+  positions: CanvasPositions;
+  setPositions: Dispatch<SetStateAction<CanvasPositions>>;
+  view: CanvasView;
+  setView: Dispatch<SetStateAction<CanvasView>>;
+  collapsed: Record<string, boolean>;
+  setCollapsed: Dispatch<SetStateAction<Record<string, boolean>>>;
   deleteEntity: (name: string) => void;
   addAttribute: (table: string) => string | null;
   editAttribute: (table: string, oldName: string, changes: Partial<Column>) => boolean;
   deleteAttribute: (table: string, name: string) => boolean;
   deleteRelation: (id: string) => void;
 };
-type Hierarchy = {
-  id: string;
-  supertype: string;
-  subtypes: string[];
-  exclusive: boolean;
-  total: boolean;
-};
-const INITIAL_VIEW = { x: 40, y: 25, width: 720, height: 465 };
 function getEntity(name: string, entities: Entity[]): Entity | undefined {
-  return entities.find((e) => e.table.name.toLowerCase() === name.toLowerCase());
-}
-function HierarchyPreview({
-  supertype,
-  subtypes,
-  exclusive,
-  total,
-}: {
-  supertype: string;
-  subtypes: string[];
-  exclusive: boolean;
-  total: boolean;
-}) {
-  const labels = subtypes.length ? subtypes : ["Subtipo A", "Subtipo B"];
-  const points = labels.map((_, index) => ({
-    x:
-      300 + (index - (labels.length - 1) / 2) * Math.min(155, 460 / Math.max(labels.length - 1, 1)),
-    y: 222,
-  }));
-  return (
-    <div className="diagram-kind-preview">
-      <strong>Vista previa</strong>
-      <svg
-        viewBox="0 0 600 300"
-        role="img"
-        aria-label="Vista previa de jerarquía de generalización"
-      >
-        <rect x="220" y="28" width="160" height="52" rx="4" className="draft-preview-entity" />
-        <text
-          x="300"
-          y="56"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="draft-preview-label"
-        >
-          {supertype || "Supertipo"}
-        </text>
-        <line x1="300" y1="80" x2="300" y2="126" className="draft-preview-edge" />
-        <text x="322" y="105" className="draft-preview-label">
-          (1,1)
-        </text>
-        <circle cx="300" cy="125" r="6" className="draft-preview-node outline" />
-        <path d="M270 144 L330 144 L300 180 Z" className="draft-preview-entity" />
-        {points.map((point, index) => (
-          <g key={labels[index]}>
-            <line
-              x1={
-                300 +
-                (index - (points.length - 1) / 2) *
-                  Math.min(34, 80 / Math.max(points.length - 1, 1))
-              }
-              y1="144"
-              x2={point.x}
-              y2="194"
-              className="draft-preview-edge"
-            />
-            <text x={point.x} y="187" textAnchor="middle" className="draft-preview-label">
-              (0,1)
-            </text>
-            <rect
-              x={point.x - 66}
-              y={point.y}
-              width="132"
-              height="48"
-              rx="4"
-              className="draft-preview-entity"
-            />
-            <text
-              x={point.x}
-              y={point.y + 25}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="draft-preview-label"
-            >
-              {labels[index]}
-            </text>
-          </g>
-        ))}
-        {exclusive && (
-          <path
-            d={`M${Math.max(50, points[0].x - 66)} 207 Q300 286 ${Math.min(550, points[points.length - 1].x + 66)} 207`}
-            className="hierarchy-arc"
-          />
-        )}
-        {total && <circle cx="300" cy="124" r="9" className="hierarchy-total" />}
-      </svg>
-      <small>Las cardinalidades de la jerarquía son fijas.</small>
-    </div>
-  );
-}
-function RelationPreview({
-  left,
-  right,
-  participants,
-  name,
-  kind,
-  weakCardinality,
-  dependency,
-  minima,
-}: {
-  left: string;
-  right: string;
-  participants: string[];
-  name: string;
-  kind: Relation["kind"];
-  weakCardinality?: WeakCardinality;
-  dependency?: string;
-  minima: (0 | 1)[];
-}) {
-  const rightMax = weakCardinality
-    ? weakCardinality.endsWith(":1")
-      ? "1"
-      : "n"
-    : kind === "1:1"
-      ? "1"
-      : kind === "1:N"
-        ? "n"
-        : "n";
-  const leftMax = weakCardinality ? "1" : kind === "1:N" ? "1" : kind === "1:1" ? "1" : "n";
-  if (participants.length > 2) {
-    const points = [
-      { x: 300, y: 42 },
-      { x: 520, y: 130 },
-      { x: 420, y: 220 },
-      { x: 180, y: 220 },
-    ].slice(0, participants.length);
-    return (
-      <div className="diagram-kind-preview">
-        <strong>Vista previa</strong>
-        <svg
-          viewBox="0 0 600 270"
-          role="img"
-          aria-label="Vista previa de interrelación con varios participantes"
-        >
-          {points.map((point, index) => (
-            <g key={participants[index]}>
-              <line x1="300" y1="140" x2={point.x} y2={point.y} className="draft-preview-edge" />
-              <rect
-                x={point.x - 66}
-                y={point.y - 23}
-                width="132"
-                height="46"
-                rx="4"
-                className="draft-preview-entity"
-              />
-              <text
-                x={point.x}
-                y={point.y}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className="draft-preview-label"
-              >
-                {participants[index]}
-              </text>
-              <text
-                x={(point.x + 300) / 2}
-                y={(point.y + 140) / 2 - 8}
-                className="draft-preview-label"
-              >
-                ({minima[index] ?? 0},n)
-              </text>
-            </g>
-          ))}
-          <polygon points="300,104 336,140 300,176 264,140" className="draft-preview-entity" />
-          <text
-            x="300"
-            y="140"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            className="draft-preview-label"
-          >
-            {name.slice(0, 12)}
-          </text>
-          <text x="300" y="92" textAnchor="middle" className="draft-preview-label">
-            N-aria
-          </text>
-        </svg>
-      </div>
-    );
-  }
-  return (
-    <div className="diagram-kind-preview">
-      <strong>Vista previa</strong>
-      <svg viewBox="0 0 600 260" role="img" aria-label="Vista previa de la interrelación">
-        <line x1="175" y1="135" x2="245" y2="135" className="draft-preview-edge" />
-        <line x1="355" y1="135" x2="425" y2="135" className="draft-preview-edge" />
-        <rect x="30" y="108" width="145" height="54" rx="4" className="draft-preview-entity" />
-        <rect x="425" y="108" width="145" height="54" rx="4" className="draft-preview-entity" />
-        <text
-          x="102"
-          y="136"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="draft-preview-label"
-        >
-          {left}
-        </text>
-        <text
-          x="497"
-          y="136"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="draft-preview-label"
-        >
-          {right}
-        </text>
-        <polygon points="300,80 355,135 300,190 245,135" className="draft-preview-entity" />
-        {(dependency === "ID" || dependency === "E") && (
-          <>
-            <line x1="273" y1="108" x2="327" y2="108" className="draft-preview-edge" />
-            <text x="300" y="103" textAnchor="middle" className="draft-preview-label">
-              {dependency === "ID" ? "ID" : "EX"}
-            </text>
-          </>
-        )}
-        <text
-          x="300"
-          y="139"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="draft-preview-label"
-        >
-          {name || "Relación"}
-        </text>
-        <text x="300" y="60" textAnchor="middle" className="draft-preview-label">
-          {weakCardinality ? leftMax + ":" + rightMax : kind}
-        </text>
-        <text x="210" y="119" textAnchor="middle" className="draft-preview-label">
-          ({minima[0] ?? 1},{leftMax})
-        </text>
-        <text x="390" y="119" textAnchor="middle" className="draft-preview-label">
-          ({minima[1] ?? 0},{rightMax})
-        </text>
-      </svg>
-    </div>
-  );
-}
-function point(entity: Entity | undefined, fallback: number) {
-  return entity ? { x: entity.x, y: entity.y } : { x: 140 + fallback * 300, y: 620 };
-}
-function entityEdge(entity: { x: number; y: number }, toward: { x: number; y: number }) {
-  const dx = toward.x - entity.x,
-    dy = toward.y - entity.y;
-  const scale = 1 / Math.max(Math.abs(dx) / 78, Math.abs(dy) / 28, 0.0001);
-  return { x: entity.x + dx * scale, y: entity.y + dy * scale };
-}
-function diamondEdge(center: { x: number; y: number }, toward: { x: number; y: number }) {
-  const dx = toward.x - center.x,
-    dy = toward.y - center.y;
-  const scale = 39 / Math.max(Math.abs(dx) + Math.abs(dy), 0.0001);
-  return { x: center.x + dx * scale, y: center.y + dy * scale };
-}
-function attributePosition(
-  entity: Entity,
-  index: number,
-  count: number,
-  avoidAngles: number[] = [],
-) {
-  const extra = Math.max(0, count - 5);
-  const base = -Math.PI / 2 + (index * 2 * Math.PI) / Math.max(count, 1);
-  let rotation = 0;
-  if (avoidAngles.length) {
-    let bestScore = -Infinity;
-    for (let step = 0; step < 72; step++) {
-      const candidate = (step * Math.PI) / 36;
-      const clearances = Array.from({ length: Math.max(count, 1) }, (_, slot) => {
-        const angle = -Math.PI / 2 + (slot * 2 * Math.PI) / Math.max(count, 1) + candidate;
-        return Math.min(
-          ...avoidAngles.map((blocked) => {
-            const delta = Math.abs(angle - blocked) % (Math.PI * 2);
-            return Math.min(delta, Math.PI * 2 - delta);
-          }),
-        );
-      });
-      const score =
-        Math.min(...clearances) +
-        (clearances.reduce((sum, value) => sum + value, 0) / clearances.length) * 0.15;
-      if (score > bestScore) {
-        bestScore = score;
-        rotation = candidate;
-      }
-    }
-  }
-  const angle = base + rotation;
-  return {
-    x: entity.x + Math.cos(angle) * (116 + extra * 11),
-    y: entity.y + Math.sin(angle) * (82 + extra * 9),
-    angle,
-  };
-}
-function attributePoint(
-  entity: Entity,
-  name: string,
-  collapsed: boolean,
-  avoidAngles: number[] = [],
-) {
-  const attributes = entity.table.columns.filter(
-    (column) => column.primaryKey || !column.foreignKey,
-  );
-  const shown = collapsed ? attributes.slice(0, 1) : attributes;
-  const index = shown.findIndex((column) => column.name.toLowerCase() === name.toLowerCase());
-  return index < 0 ? undefined : attributePosition(entity, index, shown.length, avoidAngles);
-}
-function cardinalityPoint(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  side: number,
-) {
-  const dx = to.x - from.x,
-    dy = to.y - from.y,
-    length = Math.max(1, Math.hypot(dx, dy));
-  const t = 0.38;
-  return {
-    x: from.x + dx * t - (dy / length) * 14 * side,
-    y: from.y + dy * t + (dx / length) * 14 * side,
-  };
-}
-function orthogonalAttributeRoute(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  entities: Entity[],
-) {
-  const boxes = entities.map((entity) => ({
-    left: entity.x - 84,
-    right: entity.x + 84,
-    top: entity.y - 36,
-    bottom: entity.y + 36,
-  }));
-  const minX = Math.min(...boxes.map((box) => box.left)) - 28,
-    maxX = Math.max(...boxes.map((box) => box.right)) + 28;
-  const minY = Math.min(...boxes.map((box) => box.top)) - 28,
-    maxY = Math.max(...boxes.map((box) => box.bottom)) + 28;
-  const candidates = [
-    ...(Math.abs(start.x - end.x) < 0.1 || Math.abs(start.y - end.y) < 0.1 ? [[start, end]] : []),
-    [start, { x: end.x, y: start.y }, end],
-    [start, { x: start.x, y: end.y }, end],
-    ...[minX, maxX].map((x) => [start, { x, y: start.y }, { x, y: end.y }, end]),
-    ...[minY, maxY].map((y) => [start, { x: start.x, y }, { x: end.x, y }, end]),
-  ];
-  const intersects = (
-    a: { x: number; y: number },
-    b: { x: number; y: number },
-    box: { left: number; right: number; top: number; bottom: number },
-  ) =>
-    Math.abs(a.y - b.y) < 0.1
-      ? a.y > box.top &&
-        a.y < box.bottom &&
-        Math.max(Math.min(a.x, b.x), box.left) < Math.min(Math.max(a.x, b.x), box.right)
-      : Math.abs(a.x - b.x) < 0.1 &&
-        a.x > box.left &&
-        a.x < box.right &&
-        Math.max(Math.min(a.y, b.y), box.top) < Math.min(Math.max(a.y, b.y), box.bottom);
-  const score = (path: { x: number; y: number }[]) =>
-    path
-      .slice(1)
-      .reduce(
-        (sum, point, index) =>
-          sum +
-          boxes.reduce((hits, box) => hits + Number(intersects(path[index], point, box)), 0) *
-            10000 +
-          Math.hypot(point.x - path[index].x, point.y - path[index].y),
-        0,
-      );
-  const path = candidates.reduce((best, candidate) =>
-    score(candidate) < score(best) ? candidate : best,
-  );
-  return path.map((point, index) => `${index ? "L" : "M"}${point.x} ${point.y}`).join(" ");
-}
-
-async function downloadSvgAsPdf(svg: SVGSVGElement, filename: string, statement: string) {
-  const viewBoxValues = (svg.getAttribute("viewBox") ?? "0 0 720 465")
-    .trim()
-    .split(/[ ,]+/)
-    .map(Number);
-  const fallbackViewBox = {
-    x: viewBoxValues[0] || 0,
-    y: viewBoxValues[1] || 0,
-    width: viewBoxValues[2] || 720,
-    height: viewBoxValues[3] || 465,
-  };
-  let viewBox = fallbackViewBox;
-  try {
-    const bounds = svg.getBBox();
-    if (bounds.width > 0 && bounds.height > 0) {
-      const padding = 48;
-      viewBox = {
-        x: bounds.x - padding,
-        y: bounds.y - padding,
-        width: bounds.width + padding * 2,
-        height: bounds.height + padding * 2,
-      };
-    }
-  } catch {
-    /* Usa el viewBox actual como respaldo. */
-  }
-  const ratio = viewBox.width / Math.max(viewBox.height, 1);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(Math.min(2800, Math.max(1200, 2000 * ratio)));
-  canvas.height = Math.round(Math.min(2400, Math.max(900, canvas.width / Math.max(ratio, 0.1))));
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("El navegador no pudo generar la imagen del PDF.");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  const scaleX = canvas.width / Math.max(viewBox.width, 1),
-    scaleY = canvas.height / Math.max(viewBox.height, 1);
-  context.setTransform(scaleX, 0, 0, scaleY, -viewBox.x * scaleX, -viewBox.y * scaleY);
-  const drawNode = (node: Element) => {
-    const tag = node.localName;
-    if (["defs", "title", "desc", "style", "marker"].includes(tag)) return;
-    const style = getComputedStyle(node);
-    if (style.display === "none" || style.visibility === "hidden") return;
-    context.save();
-    context.globalAlpha *= Number(style.opacity || 1);
-    context.fillStyle = style.fill === "none" ? "transparent" : style.fill;
-    context.strokeStyle = style.stroke === "none" ? "transparent" : style.stroke;
-    context.lineWidth = Number.parseFloat(style.strokeWidth) || 1;
-    context.lineCap = style.strokeLinecap as CanvasLineCap;
-    context.lineJoin = style.strokeLinejoin as CanvasLineJoin;
-    context.setLineDash(
-      style.strokeDasharray === "none"
-        ? []
-        : style.strokeDasharray.split(/[ ,]+/).map(Number).filter(Number.isFinite),
-    );
-    const attr = (name: string, fallback = 0) => Number(node.getAttribute(name) ?? fallback);
-    const fillAndStroke = (path: Path2D | undefined = undefined) => {
-      if (style.fill !== "none") path ? context.fill(path) : context.fill();
-      if (style.stroke !== "none") path ? context.stroke(path) : context.stroke();
-    };
-    if (tag === "g" || tag === "svg") {
-      Array.from(node.children).forEach(drawNode);
-    } else if (tag === "line") {
-      const x1 = attr("x1"),
-        y1 = attr("y1"),
-        x2 = attr("x2"),
-        y2 = attr("y2");
-      context.beginPath();
-      context.moveTo(x1, y1);
-      context.lineTo(x2, y2);
-      context.stroke();
-      if (style.markerEnd !== "none") {
-        const angle = Math.atan2(y2 - y1, x2 - x1),
-          size = 8;
-        context.beginPath();
-        context.moveTo(x2, y2);
-        context.lineTo(x2 - size * Math.cos(angle - 0.45), y2 - size * Math.sin(angle - 0.45));
-        context.lineTo(x2 - size * Math.cos(angle + 0.45), y2 - size * Math.sin(angle + 0.45));
-        context.closePath();
-        context.fillStyle = context.strokeStyle;
-        context.fill();
-      }
-    } else if (tag === "rect") {
-      const x = attr("x"),
-        y = attr("y"),
-        w = attr("width"),
-        h = attr("height");
-      context.beginPath();
-      const radius = Math.min(attr("rx"), w / 2, h / 2);
-      if (radius && "roundRect" in context) context.roundRect(x, y, w, h, radius);
-      else context.rect(x, y, w, h);
-      fillAndStroke();
-    } else if (tag === "circle" || tag === "ellipse") {
-      context.beginPath();
-      context.ellipse(
-        attr("cx"),
-        attr("cy"),
-        tag === "circle" ? attr("r") : attr("rx"),
-        tag === "circle" ? attr("r") : attr("ry"),
-        0,
-        0,
-        Math.PI * 2,
-      );
-      fillAndStroke();
-    } else if (tag === "polygon" || tag === "polyline") {
-      const points = (node.getAttribute("points") ?? "").trim().split(/[ ,]+/).map(Number);
-      if (points.length >= 4) {
-        context.beginPath();
-        context.moveTo(points[0], points[1]);
-        for (let i = 2; i + 1 < points.length; i += 2) context.lineTo(points[i], points[i + 1]);
-        if (tag === "polygon") context.closePath();
-        fillAndStroke();
-      }
-    } else if (tag === "path") {
-      const data = node.getAttribute("d");
-      if (data) {
-        const path = new Path2D(data);
-        fillAndStroke(path);
-      }
-    } else if (tag === "text") {
-      const size = Number.parseFloat(style.fontSize) || 12;
-      context.font = `${style.fontStyle} ${style.fontWeight} ${size}px ${style.fontFamily}`;
-      context.textAlign =
-        style.textAnchor === "middle" ? "center" : style.textAnchor === "end" ? "right" : "left";
-      context.textBaseline = "alphabetic";
-      const x = attr("x"),
-        y = attr("y"),
-        text = node.textContent ?? "";
-      if (style.fill !== "none") context.fillText(text, x, y);
-      if (style.stroke !== "none") context.strokeText(text, x, y);
-    }
-    context.restore();
-  };
-  Array.from(svg.children).forEach(drawNode);
-  const encode = (value: string) => new TextEncoder().encode(value);
-  const pageWidth = 842,
-    pageHeight = 595,
-    margin = 24;
-  const joinBytes = (...parts: Uint8Array[]) => {
-    const joined = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
-    let position = 0;
-    for (const part of parts) {
-      joined.set(part, position);
-      position += part.length;
-    }
-    return joined;
-  };
-  const statementCanvases: HTMLCanvasElement[] = [];
-  if (statement.trim()) {
-    const textCanvas = document.createElement("canvas");
-    textCanvas.width = 1600;
-    textCanvas.height = 1100;
-    const textContext = textCanvas.getContext("2d");
-    if (!textContext) throw new Error("El navegador no pudo preparar el enunciado para el PDF.");
-    textContext.fillStyle = "#ffffff";
-    textContext.fillRect(0, 0, textCanvas.width, textCanvas.height);
-    textContext.font = "700 46px Arial, sans-serif";
-    textContext.fillStyle = "#274959";
-    textContext.fillText("Enunciado del ejercicio", 120, 140);
-    textContext.strokeStyle = "#dce6e9";
-    textContext.lineWidth = 3;
-    textContext.beginPath();
-    textContext.moveTo(120, 180);
-    textContext.lineTo(1480, 180);
-    textContext.stroke();
-    textContext.font = "400 30px Arial, sans-serif";
-    textContext.fillStyle = "#263943";
-    const lines: string[] = [];
-    for (const paragraph of statement.replace(/\r/g, "").split("\n")) {
-      if (!paragraph.trim()) {
-        lines.push("");
-        continue;
-      }
-      let line = "";
-      for (const word of paragraph.trim().split(/\s+/)) {
-        const candidate = line ? `${line} ${word}` : word;
-        if (line && textContext.measureText(candidate).width > 1360) {
-          lines.push(line);
-          line = word;
-        } else line = candidate;
-      }
-      if (line) lines.push(line);
-    }
-    const linesPerPage = 18;
-    for (let start = 0; start < lines.length; start += linesPerPage) {
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = textCanvas.width;
-      pageCanvas.height = textCanvas.height;
-      const pageContext = pageCanvas.getContext("2d");
-      if (!pageContext) throw new Error("El navegador no pudo preparar el enunciado para el PDF.");
-      pageContext.fillStyle = "#ffffff";
-      pageContext.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-      pageContext.fillStyle = "#274959";
-      pageContext.font = "700 46px Arial, sans-serif";
-      pageContext.fillText(
-        start ? "Enunciado del ejercicio (continuación)" : "Enunciado del ejercicio",
-        120,
-        140,
-      );
-      pageContext.strokeStyle = "#dce6e9";
-      pageContext.lineWidth = 3;
-      pageContext.beginPath();
-      pageContext.moveTo(120, 180);
-      pageContext.lineTo(1480, 180);
-      pageContext.stroke();
-      pageContext.fillStyle = "#263943";
-      pageContext.font = "400 30px Arial, sans-serif";
-      lines
-        .slice(start, start + linesPerPage)
-        .forEach((line, index) => pageContext.fillText(line, 120, 245 + index * 44));
-      statementCanvases.push(pageCanvas);
-    }
-  }
-  const solutionCanvas = document.createElement("canvas");
-  solutionCanvas.width = 1600;
-  solutionCanvas.height = 1100;
-  const solutionContext = solutionCanvas.getContext("2d");
-  if (!solutionContext) throw new Error("El navegador no pudo preparar la solución para el PDF.");
-  solutionContext.fillStyle = "#ffffff";
-  solutionContext.fillRect(0, 0, solutionCanvas.width, solutionCanvas.height);
-  solutionContext.fillStyle = "#274959";
-  solutionContext.font = "700 46px Arial, sans-serif";
-  solutionContext.fillText(
-    filename.includes("conceptual") ? "Solución · Modelo conceptual" : "Solución · Modelo lógico",
-    120,
-    140,
-  );
-  solutionContext.strokeStyle = "#dce6e9";
-  solutionContext.lineWidth = 3;
-  solutionContext.beginPath();
-  solutionContext.moveTo(120, 180);
-  solutionContext.lineTo(1480, 180);
-  solutionContext.stroke();
-  const diagramScale = Math.min(1400 / canvas.width, 820 / canvas.height);
-  const diagramWidth = canvas.width * diagramScale,
-    diagramHeight = canvas.height * diagramScale;
-  solutionContext.drawImage(
-    canvas,
-    (1600 - diagramWidth) / 2,
-    230 + (820 - diagramHeight) / 2,
-    diagramWidth,
-    diagramHeight,
-  );
-  const pageCanvases = [...statementCanvases, solutionCanvas];
-  const images = pageCanvases.map((pageCanvas) => ({
-    width: pageCanvas.width,
-    height: pageCanvas.height,
-    jpeg: Uint8Array.from(atob(pageCanvas.toDataURL("image/jpeg", 0.96).split(",")[1]), (char) =>
-      char.charCodeAt(0),
-    ),
-  }));
-  const objects = [
-    encode("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"),
-    encode(
-      `2 0 obj\n<< /Type /Pages /Kids [${images.map((_, index) => `${3 + index * 3} 0 R`).join(" ")}] /Count ${images.length} >>\nendobj\n`,
-    ),
-  ];
-  images.forEach((image, index) => {
-    const pageId = 3 + index * 3,
-      imageId = pageId + 1,
-      contentId = pageId + 2;
-    const scale = Math.min(
-      (pageWidth - margin * 2) / image.width,
-      (pageHeight - margin * 2) / image.height,
-    );
-    const drawWidth = image.width * scale,
-      drawHeight = image.height * scale;
-    const drawX = (pageWidth - drawWidth) / 2,
-      drawY = (pageHeight - drawHeight) / 2;
-    const content = encode(
-      `q\n${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm\n/Im${index} Do\nQ\n`,
-    );
-    objects.push(
-      encode(
-        `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im${index} ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`,
-      ),
-    );
-    objects.push(
-      joinBytes(
-        encode(
-          `${imageId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.jpeg.length} >>\nstream\n`,
-        ),
-        image.jpeg,
-        encode("\nendstream\nendobj\n"),
-      ),
-    );
-    objects.push(
-      joinBytes(
-        encode(`${contentId} 0 obj\n<< /Length ${content.length} >>\nstream\n`),
-        content,
-        encode("endstream\nendobj\n"),
-      ),
-    );
-  });
-  const header = encode("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
-  let offset = header.length;
-  const offsets = objects.map((object) => {
-    const current = offset;
-    offset += object.length;
-    return current;
-  });
-  const xrefOffset = offset;
-  const xref = encode(
-    `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((value) => `${String(value).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
-  );
-  const pdfBytes = new Uint8Array(
-    header.length + objects.reduce((total, part) => total + part.length, 0) + xref.length,
-  );
-  let writeAt = 0;
-  for (const part of [header, ...objects, xref]) {
-    pdfBytes.set(part, writeAt);
-    writeAt += part.length;
-  }
-  const pdf = new Blob([pdfBytes.buffer], { type: "application/pdf" });
-  const pdfUrl = URL.createObjectURL(pdf);
-  const link = document.createElement("a");
-  link.href = pdfUrl;
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
-}
-
-function calculateLayout(nodes: Entity[], relations: Relation[], hierarchies: Hierarchy[]) {
-  const byName = new Map(nodes.map((node) => [node.table.name.toLowerCase(), node]));
-  const adjacent = new Map(nodes.map((node) => [node.table.name, new Set<string>()]));
-  const connect = (a: string, b: string) => {
-    const left = byName.get(a.toLowerCase())?.table.name;
-    const right = byName.get(b.toLowerCase())?.table.name;
-    if (left && right && left !== right) {
-      adjacent.get(left)?.add(right);
-      adjacent.get(right)?.add(left);
-    }
-  };
-  for (const relation of relations) {
-    const participants = relation.participants ?? [relation.left, relation.right];
-    for (let i = 0; i < participants.length; i++)
-      for (let j = i + 1; j < participants.length; j++) connect(participants[i], participants[j]);
-  }
-  for (const hierarchy of hierarchies)
-    for (const subtype of hierarchy.subtypes) connect(hierarchy.supertype, subtype);
-  const unseen = new Set(nodes.map((node) => node.table.name));
-  const components: string[][] = [];
-  while (unseen.size) {
-    const root = [...unseen].sort(
-      (a, b) => (adjacent.get(b)?.size ?? 0) - (adjacent.get(a)?.size ?? 0) || a.localeCompare(b),
-    )[0];
-    const queue = [root];
-    const component: string[] = [];
-    unseen.delete(root);
-    while (queue.length) {
-      const name = queue.shift()!;
-      component.push(name);
-      const next = [...(adjacent.get(name) ?? [])]
-        .filter((item) => unseen.has(item))
-        .sort(
-          (a, b) =>
-            (adjacent.get(b)?.size ?? 0) - (adjacent.get(a)?.size ?? 0) || a.localeCompare(b),
-        );
-      for (const item of next) {
-        unseen.delete(item);
-        queue.push(item);
-      }
-    }
-    components.push(component);
-  }
-  const result: Record<string, { x: number; y: number }> = {};
-  let offsetX = 180;
-  let offsetY = 180;
-  let componentRowHeight = 0;
-  const maxRowWidth = 2400;
-  const nodeFootprint = (name: string) => {
-    const node = byName.get(name.toLowerCase());
-    const attrs =
-      node?.table.columns.filter((column) => column.primaryKey || !column.foreignKey) ?? [];
-    const extra = Math.max(0, attrs.length - 5) * 17;
-    return {
-      rx: 143 + extra,
-      ry: 103 + Math.max(0, attrs.length - 5) * 14,
-      bottom: 103 + Math.max(0, attrs.length - 5) * 14 + 88,
-    };
-  };
-  for (const component of components) {
-    const depth = new Map<string, number>();
-    const root = component[0];
-    depth.set(root, 0);
-    const queue = [root];
-    while (queue.length) {
-      const name = queue.shift()!;
-      for (const next of adjacent.get(name) ?? [])
-        if (component.includes(next) && !depth.has(next)) {
-          depth.set(next, (depth.get(name) ?? 0) + 1);
-          queue.push(next);
-        }
-    }
-    const maxDepth = Math.max(0, ...depth.values());
-    const layers = Array.from({ length: maxDepth + 1 }, (_, d) =>
-      component.filter((name) => depth.get(name) === d).sort((a, b) => a.localeCompare(b)),
-    );
-    for (let sweep = 0; sweep < 8; sweep++) {
-      for (let d = 1; d < layers.length; d++) {
-        const previous = new Map(layers[d - 1].map((name, i) => [name, i]));
-        const score = (name: string) => {
-          const indexes = [...(adjacent.get(name) ?? [])]
-            .map((item) => previous.get(item))
-            .filter((value): value is number => value !== undefined);
-          return indexes.length
-            ? indexes.reduce((sum, value) => sum + value, 0) / indexes.length
-            : Number.MAX_SAFE_INTEGER;
-        };
-        layers[d].sort((a, b) => score(a) - score(b) || a.localeCompare(b));
-      }
-      for (let d = layers.length - 2; d >= 0; d--) {
-        const next = new Map(layers[d + 1].map((name, i) => [name, i]));
-        const score = (name: string) => {
-          const indexes = [...(adjacent.get(name) ?? [])]
-            .map((item) => next.get(item))
-            .filter((value): value is number => value !== undefined);
-          return indexes.length
-            ? indexes.reduce((sum, value) => sum + value, 0) / indexes.length
-            : Number.MAX_SAFE_INTEGER;
-        };
-        layers[d].sort((a, b) => score(a) - score(b) || a.localeCompare(b));
-      }
-    }
-    const maxRadiusX = Math.max(...component.map((name) => nodeFootprint(name).rx));
-    const maxBottom = Math.max(...component.map((name) => nodeFootprint(name).bottom));
-    const xGap = Math.max(500, maxRadiusX * 2 + 190);
-    const yGap = Math.max(480, maxBottom * 2 + 95);
-    const componentWidth = Math.max(1, maxDepth) * xGap + maxRadiusX * 2 + 260;
-    const componentHeight = Math.max(...layers.map((layer) => layer.length)) * yGap + 300;
-    if (offsetX > 180 && offsetX + componentWidth > maxRowWidth) {
-      offsetX = 180;
-      offsetY += componentRowHeight + 260;
-      componentRowHeight = 0;
-    }
-    layers.forEach((layer, d) => {
-      const rowHeight = (layer.length - 1) * yGap;
-      layer.forEach((name, row) => {
-        result[name] = {
-          x: offsetX + maxRadiusX + 90 + d * xGap,
-          y: offsetY + 150 + row * yGap - rowHeight / 2,
-        };
-      });
-    });
-    offsetX += componentWidth + 180;
-    componentRowHeight = Math.max(componentRowHeight, componentHeight);
-  }
-  for (const hierarchy of hierarchies) {
-    const supertype = nodes.find(
-      (node) => node.table.name.toLowerCase() === hierarchy.supertype.toLowerCase(),
-    );
-    const children = hierarchy.subtypes
-      .map((name) => nodes.find((node) => node.table.name.toLowerCase() === name.toLowerCase()))
-      .filter((node): node is Entity => Boolean(node));
-    if (!supertype || children.length < 2) continue;
-    const centerX =
-      children.reduce((sum, node) => sum + (result[node.table.name]?.x ?? node.x), 0) /
-      children.length;
-    const topY = Math.min(...children.map((node) => result[node.table.name]?.y ?? node.y));
-    const spacing = Math.max(
-      520,
-      430 + Math.max(...children.map((node) => nodeFootprint(node.table.name).rx)) * 0.35,
-    );
-    result[supertype.table.name] = { x: centerX, y: topY - spacing };
-    children.forEach((child, index) => {
-      result[child.table.name] = {
-        x:
-          centerX +
-          (index - (children.length - 1) / 2) *
-            Math.max(
-              520,
-              2 * Math.max(...children.map((node) => nodeFootprint(node.table.name).rx)) + 150,
-            ),
-        y: topY,
-      };
-    });
-  }
-  if (!nodes.length) return { positions: result, view: INITIAL_VIEW };
-  const xs = Object.entries(result).map(([name, p]) => ({ ...p, rx: nodeFootprint(name).rx }));
-  const ys = Object.entries(result).map(([name, p]) => ({ ...p, ry: nodeFootprint(name).bottom }));
-  const minX = Math.min(...xs.map((p) => p.x - p.rx - 100));
-  const maxX = Math.max(...xs.map((p) => p.x + p.rx + 100));
-  const minY = Math.min(...ys.map((p) => p.y - p.ry - 100));
-  const maxY = Math.max(...ys.map((p) => p.y + p.ry + 120));
-  let width = Math.max(720, (maxX - minX) * 1.08);
-  let height = Math.max(465, (maxY - minY) * 1.08);
-  if (width / height > 720 / 465) height = (width * 465) / 720;
-  else width = (height * 720) / 465;
-  return {
-    positions: result,
-    view: { x: (minX + maxX - width) / 2, y: (minY + maxY - height) / 2, width, height },
-  };
+  return entities.find((e) => sameName(e.table.name, name));
 }
 export function Diagram({
   model,
@@ -923,25 +88,55 @@ export function Diagram({
   renameEntity,
   requestEntityEdit,
   entityRenameRequest,
+  hierarchies,
+  setHierarchies,
+  positions,
+  setPositions,
+  view,
+  setView,
+  collapsed,
+  setCollapsed,
   deleteEntity,
   addAttribute,
   editAttribute,
   deleteAttribute,
   deleteRelation,
-}: Props) {
-  const [positions, setPositions] = usePersistentState<Record<string, { x: number; y: number }>>(
-    "sima.modelador.positions.v1",
-    {},
-  );
-  const [view, setView] = usePersistentState("sima.modelador.canvas-view.v1", INITIAL_VIEW);
-  const [collapsed, setCollapsed] = usePersistentState<Record<string, boolean>>(
-    "sima.modelador.collapsed.v1",
-    {},
-  );
-  const [hierarchies, setHierarchies] = usePersistentState<Hierarchy[]>(
-    "sima.modelador.hierarchies.v1",
-    [],
-  );
+}: DiagramProps) {
+  const diagramProps: DiagramProps = {
+    model,
+    conceptual,
+    exerciseStatement,
+    cardinalityMinimums,
+    setCardinalityMinimums,
+    names,
+    rename,
+    editRelation,
+    updateRelationRoles,
+    attributeMarks,
+    setAttributeMarks,
+    domains,
+    setDomains,
+    createRelation,
+    hierarchyRequest,
+    arrangeRequest,
+    renameEntity,
+    requestEntityEdit,
+    entityRenameRequest,
+    hierarchies,
+    setHierarchies,
+    positions,
+    setPositions,
+    view,
+    setView,
+    collapsed,
+    setCollapsed,
+    deleteEntity,
+    addAttribute,
+    editAttribute,
+    deleteAttribute,
+    deleteRelation,
+  };
+
   const [drag, setDrag] = useState<{ name: string; dx: number; dy: number } | null>(null);
   const [pan, setPan] = useState<{ clientX: number; clientY: number; x: number; y: number } | null>(
     null,
@@ -1076,10 +271,9 @@ export function Diagram({
       angles.push(Math.atan2(target.y - entity.y, target.x - entity.x));
     for (const relation of model.relations) {
       const participants = relation.participants ?? [relation.left, relation.right];
-      if (!participants.some((name) => name.toLowerCase() === entity.table.name.toLowerCase()))
-        continue;
+      if (!participants.some((name) => sameName(name, entity.table.name))) continue;
       const others = participants
-        .filter((name) => name.toLowerCase() !== entity.table.name.toLowerCase())
+        .filter((name) => !sameName(name, entity.table.name))
         .map((name) => getEntity(name, entities))
         .filter((item): item is Entity => Boolean(item));
       if (!others.length) addTarget({ x: entity.x + 145, y: entity.y - 85 });
@@ -1091,9 +285,9 @@ export function Diagram({
     }
     for (const hierarchy of hierarchies) {
       const names = [hierarchy.supertype, ...hierarchy.subtypes];
-      if (!names.some((name) => name.toLowerCase() === entity.table.name.toLowerCase())) continue;
+      if (!names.some((name) => sameName(name, entity.table.name))) continue;
       const others = names
-        .filter((name) => name.toLowerCase() !== entity.table.name.toLowerCase())
+        .filter((name) => !sameName(name, entity.table.name))
         .map((name) => getEntity(name, entities))
         .filter((item): item is Entity => Boolean(item));
       if (others.length)
@@ -1114,91 +308,23 @@ export function Diagram({
     if (index === 1 && selectedRelationModel?.kind !== "N:M")
       editRelation(id, { mandatory: value === 1 });
   };
-  const move = (event: PointerEvent<SVGSVGElement>) => {
-    const r = event.currentTarget.getBoundingClientRect();
-    if (relationStart)
-      setRelationPointer({
-        x: view.x + ((event.clientX - r.left) / r.width) * view.width,
-        y: view.y + ((event.clientY - r.top) / r.height) * view.height,
-      });
-    if (drag) {
-      const x = view.x + ((event.clientX - r.left) / r.width) * view.width;
-      const y = view.y + ((event.clientY - r.top) / r.height) * view.height;
-      setPositions((p) => ({ ...p, [drag.name]: { x: x - drag.dx, y: y - drag.dy } }));
-    } else if (pan) {
-      setView((current) => ({
-        ...current,
-        x: pan.x - ((event.clientX - pan.clientX) / r.width) * current.width,
-        y: pan.y - ((event.clientY - pan.clientY) / r.height) * current.height,
-      }));
-    }
-  };
-  const start = (event: PointerEvent<SVGGElement>, entity: Entity) => {
-    event.stopPropagation();
-    if (conceptual && relationTool) {
-      setRelationStart(entity.table.name);
-      const r = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
-      if (r)
-        setRelationPointer({
-          x: view.x + ((event.clientX - r.left) / r.width) * view.width,
-          y: view.y + ((event.clientY - r.top) / r.height) * view.height,
-        });
-      return;
-    }
-    const r = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
-    if (!r) return;
-    const x = view.x + ((event.clientX - r.left) / r.width) * view.width;
-    const y = view.y + ((event.clientY - r.top) / r.height) * view.height;
-    setDrag({ name: entity.table.name, dx: x - entity.x, dy: y - entity.y });
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const finishRelation = (event: PointerEvent<SVGGElement>, entity: Entity) => {
-    if (!relationStart) return;
-    event.stopPropagation();
-    setRelationDraft({
-      source: relationStart,
-      target: entity.table.name,
-      participants: [relationStart, entity.table.name],
-      name: `${relationStart}_${entity.table.name}`,
-      kind: "1:N",
-      mandatory: true,
+  const { move, start, finishRelation, startPan, endPointer, wheelZoom } =
+    useDiagramPointerHandlers({
+      conceptual,
+      relationTool,
+      relationStart,
+      setRelationStart,
+      relationPointer,
+      setRelationPointer,
+      drag,
+      setDrag,
+      pan,
+      setPan,
+      view,
+      setView,
+      setPositions,
+      setRelationDraft,
     });
-    setRelationStart(null);
-  };
-  const startPan = (event: PointerEvent<SVGSVGElement>) => {
-    if (event.target !== event.currentTarget) return;
-    setPan({ clientX: event.clientX, clientY: event.clientY, x: view.x, y: view.y });
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const endPointer = (event: PointerEvent<SVGSVGElement>) => {
-    setDrag(null);
-    setPan(null);
-    if (relationStart && event.target === event.currentTarget) setRelationStart(null);
-  };
-  const zoom = (
-    factor: number,
-    anchorX = view.x + view.width / 2,
-    anchorY = view.y + view.height / 2,
-  ) => {
-    setView((current) => {
-      const width = Math.min(2200, Math.max(300, current.width * factor));
-      const height = (width * INITIAL_VIEW.height) / INITIAL_VIEW.width;
-      const ratio = width / current.width;
-      return {
-        x: anchorX - (anchorX - current.x) * ratio,
-        y: anchorY - (anchorY - current.y) * ratio,
-        width,
-        height,
-      };
-    });
-  };
-  const wheelZoom = (event: WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const anchorX = view.x + ((event.clientX - rect.left) / rect.width) * view.width;
-    const anchorY = view.y + ((event.clientY - rect.top) / rect.height) * view.height;
-    zoom(event.deltaY < 0 ? 0.9 : 1.1, anchorX, anchorY);
-  };
   const availableEntities = entities
     .filter((entity) => !entity.associative)
     .map((entity) => entity.table.name);
@@ -1222,7 +348,7 @@ export function Diagram({
   const exportPdf = async () => {
     if (!svgRef.current) return;
     try {
-      await downloadSvgAsPdf(
+      await exportSvgAsPdf(
         svgRef.current,
         conceptual ? "modelo-conceptual.pdf" : "modelo-logico.pdf",
         exerciseStatement,
@@ -1279,911 +405,68 @@ export function Diagram({
     );
     setSelectedEntity(next);
   };
-  const relation = (r: Relation) => {
-    const participants = r.participants ?? [r.left, r.right];
-    if (participants.length >= 3) {
-      const points = participants.map((name, index) => point(getEntity(name, entities), index));
-      const mx = points.reduce((sum, p) => sum + p.x, 0) / points.length,
-        my = points.reduce((sum, p) => sum + p.y, 0) / points.length;
-      const openRelationEditor = () => {
-        setSelectedRelation(r.id);
-        setSelectedAttribute(null);
-        setSelectedEntity(null);
-        setSelectedHierarchy(null);
-      };
-      return (
-        <g key={r.id}>
-          {points.map((p, index) => {
-            const start = entityEdge(p, { x: mx, y: my });
-            const end = diamondEdge({ x: mx, y: my }, p);
-            const label = cardinalityPoint(start, end, 1);
-            const lx = label.x,
-              ly = label.y;
-            return (
-              <g key={`${r.id}:${participants[index]}`}>
-                <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} className="edge" />
-                <text x={lx} y={ly} textAnchor="middle" className="cardinality">
-                  ({relationMinimum(r, index)},n)
-                </text>
-              </g>
-            );
-          })}
-          <polygon
-            points={`${mx},${my - 49} ${mx + 49},${my} ${mx},${my + 49} ${mx - 49},${my}`}
-            className="diamond"
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              openRelationEditor();
-            }}
-          />
-          <text x={mx} y={my + 3} textAnchor="middle" className="relation-name">
-            {(names[r.id] ?? r.name).slice(0, 15)}
-          </text>
-          <text x={mx} y={my - 47} textAnchor="middle" className="ratio">
-            {participants.length === 3 ? "Ternaria" : "Cuaternaria"}
-          </text>
-          {r.attributes.map((attr, i) => (
-            <g key={attr}>
-              <line x1={mx} y1={my + 49} x2={mx} y2={my + 66 + i * 32} className="edge" />
-              <circle cx={mx} cy={my + 77 + i * 32} r="22" className="attribute" />
-              <text x={mx} y={my + 80 + i * 32} textAnchor="middle" className="attribute-label">
-                {attr}
-              </text>
-            </g>
-          ))}
-        </g>
-      );
-    }
-    const a = point(getEntity(r.left, entities), 0);
-    const b = point(getEntity(r.right, entities), 1);
-    const same = r.left.toLowerCase() === r.right.toLowerCase();
-    const mx = same ? a.x + 160 : (a.x + b.x) / 2;
-    const my = same ? a.y : (a.y + b.y) / 2;
-    const ratio = r.weakCardinality ? (r.weakCardinality.endsWith(":1") ? "1:1" : "1:N") : r.kind;
-    const leftLabel = `(${relationMinimum(r, 0)},${relationMaximum(r, 0)})`;
-    const rightLabel = `(${relationMinimum(r, 1)},${relationMaximum(r, 1)})`;
-    const leftCardX = same ? (a.x + mx) / 2 : a.x + 104;
-    const rightCardX = same ? (a.x + mx) / 2 : a.x + 104;
-    const leftCardAnchor = same ? "middle" : "start";
-    const rightCardAnchor = same ? "middle" : "start";
-    const leftCardY = same ? a.y - 96 : a.y - 30;
-    const rightCardY = same ? a.y - 9 : a.y + 34;
-    const startPoint = same ? { x: a.x + 78, y: a.y } : entityEdge(a, { x: mx, y: my });
-    const endPoint = same ? { x: a.x, y: a.y - 28 } : entityEdge(b, { x: mx, y: my });
-    const leftDiamondPoint = same ? { x: mx - 44, y: my } : diamondEdge({ x: mx, y: my }, a);
-    const rightDiamondPoint = same ? { x: mx, y: my - 44 } : diamondEdge({ x: mx, y: my }, b);
-    const leftLabelPoint = same
-      ? { x: leftCardX, y: leftCardY }
-      : cardinalityPoint(startPoint, leftDiamondPoint, 1);
-    const rightLabelPoint = same
-      ? { x: rightCardX, y: rightCardY }
-      : cardinalityPoint(endPoint, rightDiamondPoint, -1);
-    const loopY = a.y - 88;
-    const recursiveLoopPath = `M${endPoint.x} ${endPoint.y} V${loopY} H${mx} V${my - 44}`;
-    return (
-      <g key={r.id} className={same ? "recursive-relation" : undefined}>
-        {same ? (
-          <>
-            <line
-              x1={startPoint.x}
-              y1={startPoint.y}
-              x2={leftDiamondPoint.x}
-              y2={leftDiamondPoint.y}
-              className="edge recursive-self-edge"
-            />
-            <path d={recursiveLoopPath} className="recursive-self-edge" />
-          </>
-        ) : (
-          <>
-            <line
-              x1={startPoint.x}
-              y1={startPoint.y}
-              x2={leftDiamondPoint.x}
-              y2={leftDiamondPoint.y}
-              className="edge"
-            />
-            <line
-              x1={rightDiamondPoint.x}
-              y1={rightDiamondPoint.y}
-              x2={endPoint.x}
-              y2={endPoint.y}
-              className="edge"
-            />
-          </>
-        )}
-        <text
-          x={leftLabelPoint.x}
-          y={leftLabelPoint.y}
-          textAnchor={same ? leftCardAnchor : "middle"}
-          className="cardinality"
-        >
-          {leftLabel}
-        </text>
-        <text
-          x={rightLabelPoint.x}
-          y={rightLabelPoint.y}
-          textAnchor={same ? rightCardAnchor : "middle"}
-          className="cardinality"
-        >
-          {rightLabel}
-        </text>
-        {same &&
-          r.roles?.map((role, index) => (
-            <text
-              key={"role:" + index}
-              x={index === 0 ? (a.x + mx) / 2 : (a.x + mx) / 2}
-              y={index === 0 ? a.y - 68 : a.y + 14}
-              textAnchor="start"
-              className="cardinality role-label"
-            >
-              {role}
-            </text>
-          ))}
-        <polygon
-          points={`${mx},${my - 39} ${mx + 39},${my} ${mx},${my + 39} ${mx - 39},${my}`}
-          className="diamond"
-          onDoubleClick={(event) => {
-            event.stopPropagation();
-            setSelectedRelation(r.id);
-            setSelectedAttribute(null);
-            setSelectedEntity(null);
-            setSelectedHierarchy(null);
-          }}
-        />
-        {(r.dependency === "ID" || r.dependency === "E") && (
-          <>
-            <line
-              x1={mx - 23}
-              y1={my - 15}
-              x2={mx + 23}
-              y2={my - 15}
-              className="dependency-divider"
-            />
-            <text x={mx} y={my - 21} textAnchor="middle" className="dependency-mark">
-              {r.dependency === "ID" ? "ID" : "EX"}
-            </text>
-          </>
-        )}
-        <text x={mx} y={my + 2} textAnchor="middle" className="relation-name">
-          {(names[r.id] ?? r.name).slice(0, 13)}
-        </text>
-        <text x={mx} y={my - 47} textAnchor="middle" className="ratio">
-          {ratio}
-        </text>
-        {r.attributes.map((attr, i) => (
-          <g
-            key={attr}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              setSelectedAttribute({ entity: r.name, attribute: attr });
-              setSelectedEntity(null);
-              setSelectedRelation(null);
-              setSelectedHierarchy(null);
-            }}
-          >
-            <line x1={mx} y1={my + 39} x2={mx} y2={my + 64 + i * 35} className="edge" />
-            <circle cx={mx} cy={my + 75 + i * 35} r="22" className="attribute" />
-            <text x={mx} y={my + 79 + i * 35} textAnchor="middle" className="attribute-label">
-              {attr}
-            </text>
-          </g>
-        ))}
-      </g>
-    );
-  };
   return (
     <section className="diagram-card">
-      {hierarchyOpen && (
-        <div
-          className="designer-modal-backdrop mini-menu-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setHierarchyOpen(false);
-          }}
-        >
-          <section
-            className="designer-modal diagram-mini-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Crear jerarquía"
-          >
-            <header>
-              <div>
-                <h3>Nueva jerarquía</h3>
-                <p>Selecciona un supertipo y dos o más subtipos.</p>
-              </div>
-              <button type="button" aria-label="Cerrar" onClick={() => setHierarchyOpen(false)}>
-                ×
-              </button>
-            </header>
-            <HierarchyPreview
-              supertype={hierarchyDraft.supertype}
-              subtypes={hierarchyDraft.subtypes}
-              exclusive={hierarchyDraft.exclusive}
-              total={hierarchyDraft.total}
-            />
-            <label>
-              Supertipo
-              <select
-                value={hierarchyDraft.supertype}
-                onChange={(event) =>
-                  setHierarchyDraft((current) => ({
-                    ...current,
-                    supertype: event.target.value,
-                    subtypes: current.subtypes.filter((name) => name !== event.target.value),
-                  }))
-                }
-              >
-                {availableEntities.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset>
-              <legend>Subtipos (elige dos o más)</legend>
-              <div className="hierarchy-options">
-                {availableEntities
-                  .filter((name) => name !== hierarchyDraft.supertype)
-                  .map((name) => (
-                    <label key={name}>
-                      <input
-                        type="checkbox"
-                        checked={hierarchyDraft.subtypes.includes(name)}
-                        onChange={(event) =>
-                          setHierarchyDraft((current) => ({
-                            ...current,
-                            subtypes: event.target.checked
-                              ? [...current.subtypes, name]
-                              : current.subtypes.filter((item) => item !== name),
-                          }))
-                        }
-                      />
-                      {name}
-                    </label>
-                  ))}
-              </div>
-            </fieldset>
-            <div className="hierarchy-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={hierarchyDraft.exclusive}
-                  onChange={(event) =>
-                    setHierarchyDraft((current) => ({
-                      ...current,
-                      exclusive: event.target.checked,
-                    }))
-                  }
-                />
-                Exclusiva · arco de exclusividad
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={hierarchyDraft.total}
-                  onChange={(event) =>
-                    setHierarchyDraft((current) => ({ ...current, total: event.target.checked }))
-                  }
-                />
-                Total (círculo)
-              </label>
-            </div>
-            <button
-              className="inspector-primary"
-              type="button"
-              disabled={hierarchyDraft.subtypes.length < 2}
-              onClick={saveHierarchy}
-            >
-              Añadir jerarquía
-            </button>
-          </section>
-        </div>
-      )}
-      {selectedEntity && selectedEntityModel && (
-        <div
-          className="designer-modal-backdrop mini-menu-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedEntity(null);
-          }}
-        >
-          <section
-            className="designer-modal diagram-mini-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Editar entidad"
-          >
-            <header>
-              <div>
-                <h3>Editar entidad</h3>
-                <p>{selectedEntity}</p>
-              </div>
-              <button type="button" aria-label="Cerrar" onClick={() => setSelectedEntity(null)}>
-                ×
-              </button>
-            </header>
-            <label className="inspector-field">
-              Nombre
-              <input
-                value={entityNameDraft}
-                onChange={(event) => setEntityNameDraft(event.target.value)}
-              />
-            </label>
-            <div className="inspector-buttons">
-              <button type="button" className="inspector-primary" onClick={commitEntityName}>
-                Guardar nombre
-              </button>
-              <button
-                type="button"
-                className="inspector-primary"
-                onClick={() => {
-                  const name = addAttribute(selectedEntityModel.table.name);
-                  if (name) {
-                    setSelectedAttribute({
-                      entity: selectedEntityModel.table.name,
-                      attribute: name,
-                    });
-                    setSelectedEntity(null);
-                  }
-                }}
-              >
-                ＋ Añadir atributo
-              </button>
-              <button
-                type="button"
-                className="inspector-danger"
-                onClick={() => {
-                  deleteEntity(selectedEntity);
-                  setHierarchies((current) =>
-                    current.filter(
-                      (item) =>
-                        item.supertype !== selectedEntity &&
-                        !item.subtypes.includes(selectedEntity),
-                    ),
-                  );
-                  setSelectedEntity(null);
-                }}
-              >
-                Eliminar entidad
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {selectedAttribute && selectedColumn && (
-        <div
-          className="designer-modal-backdrop mini-menu-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedAttribute(null);
-          }}
-        >
-          <section
-            className="designer-modal diagram-mini-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Editar atributo"
-          >
-            <header>
-              <div>
-                <h3>Editar atributo</h3>
-                <p>
-                  {selectedAttribute.entity} · {selectedAttribute.attribute}
-                </p>
-              </div>
-              <button type="button" aria-label="Cerrar" onClick={() => setSelectedAttribute(null)}>
-                ×
-              </button>
-            </header>
-            <div className="attribute-edit-fields">
-              <label className="inspector-field">
-                Nombre
-                <input
-                  value={selectedColumn.name}
-                  onChange={(event) => {
-                    if (
-                      selectedAttribute &&
-                      editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                        name: event.target.value,
-                      })
-                    )
-                      setSelectedAttribute({ ...selectedAttribute, attribute: event.target.value });
-                  }}
-                />
-              </label>
-              <label className="inspector-field">
-                Tipo
-                <input
-                  value={selectedColumn.type}
-                  onChange={(event) =>
-                    selectedAttribute &&
-                    editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                      type: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <div className="attribute-checks">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={selectedColumn.primaryKey}
-                    onChange={(event) =>
-                      selectedAttribute &&
-                      editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                        primaryKey: event.target.checked,
-                      })
-                    }
-                  />{" "}
-                  PK
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selectedColumn.alternateKey)}
-                    onChange={(event) =>
-                      selectedAttribute &&
-                      editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                        alternateKey: event.target.checked,
-                      })
-                    }
-                  />{" "}
-                  AK
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={selectedColumn.unique}
-                    onChange={(event) =>
-                      selectedAttribute &&
-                      editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                        unique: event.target.checked,
-                      })
-                    }
-                  />{" "}
-                  UK
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={!selectedColumn.nullable}
-                    onChange={(event) =>
-                      selectedAttribute &&
-                      editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                        nullable: !event.target.checked,
-                      })
-                    }
-                  />{" "}
-                  Obligatorio
-                </label>
-              </div>
-            </div>
-            <details className="attribute-classifications">
-              <summary>Clasificación del atributo</summary>
-              <div className="symbol-choices">
-                {(
-                  [
-                    ["simple", "Simple"],
-                    ["derived", "Derivado"],
-                    ["multivalued", "Multivaluado"],
-                    ["composite", "Compuesto"],
-                    ["multivalued-composite", "Multivaluado compuesto"],
-                    ["optional", "Opcional"],
-                  ] as const
-                ).map(([kind, label]) => (
-                  <button
-                    type="button"
-                    key={kind}
-                    className={
-                      selectedMark?.kind === kind || (kind === "simple" && !selectedMark)
-                        ? "symbol-choice active"
-                        : "symbol-choice"
-                    }
-                    onClick={() => setAttributeKind(kind)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </details>
-            {(selectedMark?.kind === "composite" ||
-              selectedMark?.kind === "multivalued-composite") && (
-              <label className="inspector-field">
-                Componentes, separados por coma
-                <input
-                  value={selectedMark.parts.join(", ")}
-                  onChange={(event) => updateAttributeParts(event.target.value)}
-                  placeholder="nombre, apellido"
-                />
-              </label>
-            )}
-            <label className="inspector-field">
-              Dominio
-              <input
-                value={domains[selectedAttributeKey] ?? ""}
-                onChange={(event) =>
-                  setDomains({ ...domains, [selectedAttributeKey]: event.target.value })
-                }
-                placeholder="Ej. correo_electronico"
-              />
-            </label>
-            <button
-              type="button"
-              className="inspector-danger"
-              disabled={selectedColumn.primaryKey}
-              onClick={() => {
-                if (
-                  selectedAttribute &&
-                  deleteAttribute(selectedAttribute.entity, selectedAttribute.attribute)
-                )
-                  setSelectedAttribute(null);
-              }}
-            >
-              Eliminar atributo
-            </button>
-          </section>
-        </div>
-      )}
-      {selectedRelation && selectedRelationModel && (
-        <div
-          className="designer-modal-backdrop mini-menu-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedRelation(null);
-          }}
-        >
-          <section
-            className="designer-modal diagram-mini-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Editar interrelación"
-          >
-            <header>
-              <div>
-                <h3>Editar interrelación</h3>
-                <p>{names[selectedRelation] ?? selectedRelationModel.name}</p>
-              </div>
-              <button type="button" aria-label="Cerrar" onClick={() => setSelectedRelation(null)}>
-                ×
-              </button>
-            </header>
-            <RelationPreview
-              left={selectedRelationModel.left}
-              right={selectedRelationModel.right}
-              participants={
-                selectedRelationModel.participants ?? [
-                  selectedRelationModel.left,
-                  selectedRelationModel.right,
-                ]
-              }
-              name={names[selectedRelation] ?? selectedRelationModel.name}
-              kind={selectedRelationModel.kind}
-              weakCardinality={selectedRelationModel.weakCardinality}
-              dependency={selectedRelationModel.dependency}
-              minima={[
-                relationMinimum(selectedRelationModel, 0),
-                relationMinimum(selectedRelationModel, 1),
-              ]}
-            />
-            <label className="inspector-field">
-              Nombre
-              <input
-                value={names[selectedRelation] ?? selectedRelationModel.name}
-                onChange={(event) => rename(selectedRelation, event.target.value)}
-              />
-            </label>
-            {selectedRelationModel.left.toLowerCase() ===
-              selectedRelationModel.right.toLowerCase() &&
-              selectedRelationModel.roles && (
-                <>
-                  <label className="inspector-field">
-                    Rol · {selectedRelationModel.left}
-                    <input
-                      value={selectedRelationModel.roles[0]}
-                      onChange={(event) => updateRecursiveRole(0, event.target.value)}
-                    />
-                  </label>
-                  <label className="inspector-field">
-                    Rol · {selectedRelationModel.right}
-                    <input
-                      value={selectedRelationModel.roles[1]}
-                      onChange={(event) => updateRecursiveRole(1, event.target.value)}
-                    />
-                  </label>
-                </>
-              )}
-            {selectedRelationModel.weakCardinality ? (
-              <>
-                <label className="inspector-field">
-                  Entidad fuerte · {selectedRelationModel.left}
-                  <input value="(1,1)" readOnly />
-                </label>
-                <label className="inspector-field">
-                  Cardinalidad junto a la entidad débil
-                  <select
-                    value={selectedRelationModel.weakCardinality}
-                    onChange={(event) =>
-                      editRelation(selectedRelation, {
-                        weakCardinality: event.target.value as WeakCardinality,
-                      })
-                    }
-                  >
-                    <option value="0:N">(0,n)</option>
-                    <option value="1:N">(1,n)</option>
-                    <option value="0:1">(0,1)</option>
-                    <option value="1:1">(1,1)</option>
-                  </select>
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="inspector-field">
-                  Cardinalidad
-                  <select
-                    value={selectedRelationModel.kind}
-                    disabled={selectedRelationModel.kind === "N:M"}
-                    onChange={(event) =>
-                      editRelation(selectedRelation, {
-                        kind: event.target.value as Relation["kind"],
-                      })
-                    }
-                  >
-                    <option value="1:N">1:N</option>
-                    <option value="1:1">1:1</option>
-                    <option value="N:M">N:M</option>
-                  </select>
-                </label>
-                {(
-                  selectedRelationModel.participants ?? [
-                    selectedRelationModel.left,
-                    selectedRelationModel.right,
-                  ]
-                ).map((participant, index) => (
-                  <label
-                    className="inspector-field"
-                    key={`${selectedRelation}:${participant}:${index}`}
-                  >
-                    Mínimo · {participant}
-                    <select
-                      value={relationMinimum(selectedRelationModel, index)}
-                      onChange={(event) =>
-                        updateRelationMinimum(
-                          selectedRelation,
-                          (
-                            selectedRelationModel.participants ?? [
-                              selectedRelationModel.left,
-                              selectedRelationModel.right,
-                            ]
-                          ).length,
-                          index,
-                          Number(event.target.value) as 0 | 1,
-                        )
-                      }
-                    >
-                      <option value={0}>0 · opcional</option>
-                      <option value={1}>1 · obligatorio</option>
-                    </select>
-                  </label>
-                ))}
-              </>
-            )}
-            <button
-              type="button"
-              className="inspector-danger"
-              onClick={() => {
-                deleteRelation(selectedRelation);
-                setSelectedRelation(null);
-              }}
-            >
-              Eliminar interrelación
-            </button>
-          </section>
-        </div>
-      )}
-      {selectedHierarchy && selectedHierarchyModel && (
-        <div
-          className="designer-modal-backdrop mini-menu-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedHierarchy(null);
-          }}
-        >
-          <section
-            className="designer-modal diagram-mini-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Editar jerarquía"
-          >
-            <header>
-              <div>
-                <h3>Editar herencia</h3>
-                <p>Modifica el supertipo, subtipos y restricciones.</p>
-              </div>
-              <button type="button" aria-label="Cerrar" onClick={() => setSelectedHierarchy(null)}>
-                ×
-              </button>
-            </header>
-            <HierarchyPreview
-              supertype={selectedHierarchyModel.supertype}
-              subtypes={selectedHierarchyModel.subtypes}
-              exclusive={selectedHierarchyModel.exclusive}
-              total={selectedHierarchyModel.total}
-            />
-            <label className="inspector-field">
-              Supertipo
-              <select
-                value={selectedHierarchyModel.supertype}
-                onChange={(event) => {
-                  const supertype = event.target.value;
-                  setHierarchies((current) =>
-                    current.map((item) =>
-                      item.id === selectedHierarchy
-                        ? {
-                            ...item,
-                            supertype,
-                            subtypes: [...item.subtypes, item.supertype].filter(
-                              (name) => name !== supertype,
-                            ),
-                          }
-                        : item,
-                    ),
-                  );
-                }}
-              >
-                <option value="">Seleccionar entidad</option>
-                {availableEntities.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset>
-              <legend>Subtipos (elige dos o más)</legend>
-              <div className="hierarchy-options">
-                {availableEntities
-                  .filter((name) => name !== selectedHierarchyModel.supertype)
-                  .map((name) => (
-                    <label key={name}>
-                      <input
-                        type="checkbox"
-                        checked={selectedHierarchyModel.subtypes.includes(name)}
-                        disabled={
-                          selectedHierarchyModel.subtypes.includes(name) &&
-                          selectedHierarchyModel.subtypes.length <= 2
-                        }
-                        onChange={(event) =>
-                          setHierarchies((current) =>
-                            current.map((item) =>
-                              item.id !== selectedHierarchy
-                                ? item
-                                : {
-                                    ...item,
-                                    subtypes: event.target.checked
-                                      ? [...item.subtypes, name]
-                                      : item.subtypes.filter((subtype) => subtype !== name),
-                                  },
-                            ),
-                          )
-                        }
-                      />
-                      {name}
-                    </label>
-                  ))}
-              </div>
-            </fieldset>
-            <div className="hierarchy-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedHierarchyModel.exclusive}
-                  onChange={(event) =>
-                    setHierarchies((current) =>
-                      current.map((item) =>
-                        item.id === selectedHierarchy
-                          ? { ...item, exclusive: event.target.checked }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-                Exclusiva · arco
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedHierarchyModel.total}
-                  onChange={(event) =>
-                    setHierarchies((current) =>
-                      current.map((item) =>
-                        item.id === selectedHierarchy
-                          ? { ...item, total: event.target.checked }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-                Total · círculo
-              </label>
-            </div>
-            <button
-              type="button"
-              className="inspector-danger"
-              onClick={() => {
-                setHierarchies((current) =>
-                  current.filter((item) => item.id !== selectedHierarchy),
-                );
-                setSelectedHierarchy(null);
-              }}
-            >
-              Quitar herencia
-            </button>
-          </section>
-        </div>
-      )}
-      {relationDraft && (
-        <section className="diagram-inspector relation-builder">
-          <header>
-            <div>
-              <strong>Nueva relación</strong>
-              <small>
-                {relationDraft.source} → {relationDraft.target}
-              </small>
-            </div>
-            <button type="button" onClick={() => setRelationDraft(null)}>
-              Cerrar
-            </button>
-          </header>
-          <label className="inspector-field">
-            Nombre
-            <input
-              value={relationDraft.name}
-              onChange={(event) =>
-                setRelationDraft((current) =>
-                  current ? { ...current, name: event.target.value } : current,
-                )
-              }
-            />
-          </label>
-          <label className="inspector-field">
-            Cardinalidad
-            <select
-              value={relationDraft.kind}
-              onChange={(event) =>
-                setRelationDraft((current) =>
-                  current
-                    ? { ...current, kind: event.target.value as RelationDraft["kind"] }
-                    : current,
-                )
-              }
-            >
-              <option value="1:N">1:N</option>
-              <option value="1:1">1:1</option>
-              <option value="N:M">N:M</option>
-            </select>
-          </label>
-          {relationDraft.kind !== "N:M" && (
-            <label className="hierarchy-options">
-              <input
-                type="checkbox"
-                checked={relationDraft.mandatory}
-                onChange={(event) =>
-                  setRelationDraft((current) =>
-                    current ? { ...current, mandatory: event.target.checked } : current,
-                  )
-                }
-              />{" "}
-              FK obligatoria (NOT NULL)
-            </label>
-          )}
-          <small>La FK se agrega en la entidad destino; N:M crea una entidad asociativa.</small>
-          <button className="inspector-primary" type="button" onClick={saveRelation}>
-            Crear relación
-          </button>
-        </section>
-      )}
+      <HierarchyCreateDialog
+        hierarchyOpen={hierarchyOpen}
+        setHierarchyOpen={setHierarchyOpen}
+        hierarchyDraft={hierarchyDraft}
+        setHierarchyDraft={setHierarchyDraft}
+        availableEntities={availableEntities}
+        saveHierarchy={saveHierarchy}
+      />
+      <EntityEditDialog
+        selectedEntity={selectedEntity}
+        selectedEntityModel={selectedEntityModel}
+        entityNameDraft={entityNameDraft}
+        setEntityNameDraft={setEntityNameDraft}
+        setSelectedEntity={setSelectedEntity}
+        commitEntityName={commitEntityName}
+        addAttribute={addAttribute}
+        setSelectedAttribute={setSelectedAttribute}
+        deleteEntity={deleteEntity}
+        setHierarchies={setHierarchies}
+      />
+      <AttributeEditDialog
+        selectedAttribute={selectedAttribute}
+        selectedColumn={selectedColumn}
+        selectedMark={selectedMark}
+        selectedAttributeKey={selectedAttributeKey}
+        domains={domains}
+        setDomains={setDomains}
+        setSelectedAttribute={setSelectedAttribute}
+        editAttribute={editAttribute}
+        setAttributeKind={setAttributeKind}
+        updateAttributeParts={updateAttributeParts}
+        deleteAttribute={deleteAttribute}
+      />
+      <RelationEditDialog
+        diagram={diagramProps}
+        selectedRelation={selectedRelation}
+        selectedRelationModel={selectedRelationModel}
+        setSelectedRelation={setSelectedRelation}
+        setSelectedAttribute={setSelectedAttribute}
+        setSelectedEntity={setSelectedEntity}
+        setSelectedHierarchy={setSelectedHierarchy}
+        relationMinimum={relationMinimum}
+        updateRecursiveRole={updateRecursiveRole}
+        updateRelationMinimum={updateRelationMinimum}
+      />
+      <HierarchyEditDialog
+        diagram={diagramProps}
+        selectedHierarchy={selectedHierarchy}
+        selectedHierarchyModel={selectedHierarchyModel}
+        availableEntities={availableEntities}
+        setSelectedHierarchy={setSelectedHierarchy}
+        setSelectedEntity={setSelectedEntity}
+        setSelectedAttribute={setSelectedAttribute}
+        setSelectedRelation={setSelectedRelation}
+      />
+      <RelationCreateDialog
+        relationDraft={relationDraft}
+        setRelationDraft={setRelationDraft}
+        saveRelation={saveRelation}
+      />
       <div className="diagram-export-bar">
         <button type="button" onClick={() => void exportPdf()}>
           Descargar PDF
@@ -2266,271 +549,74 @@ export function Diagram({
           })()}
         {conceptual ? (
           <>
-            {hierarchies.map((hierarchy) => {
-              const supertype = getEntity(hierarchy.supertype, entities);
-              const children = hierarchy.subtypes
-                .map((name) => getEntity(name, entities))
-                .filter((entity): entity is Entity => Boolean(entity));
-              if (!supertype || children.length < 2) return null;
-              const centerX = children.reduce((sum, entity) => sum + entity.x, 0) / children.length;
-              const childY = children.reduce((sum, entity) => sum + entity.y, 0) / children.length;
-              const centerY = (supertype.y + childY) / 2;
-              const apexY = centerY - 22;
-              const baseY = centerY + 18;
-              return (
-                <g
-                  key={hierarchy.id}
-                  className="hierarchy"
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedHierarchy(hierarchy.id);
+            {hierarchies.map((hierarchy) => (
+              <HierarchyNode
+                key={hierarchy.id}
+                hierarchy={hierarchy}
+                entities={entities}
+                onEdit={(id) => {
+                  setSelectedHierarchy(id);
+                  setSelectedEntity(null);
+                  setSelectedAttribute(null);
+                  setSelectedRelation(null);
+                }}
+              />
+            ))}
+            {model.relations.map((relation) => (
+              <RelationshipNode
+                key={relation.id}
+                relation={relation}
+                entities={entities}
+                names={names}
+                relationMinimum={relationMinimum}
+                relationMaximum={relationMaximum}
+                onEditRelation={(id) => {
+                  setSelectedRelation(id);
+                  setSelectedAttribute(null);
+                  setSelectedEntity(null);
+                  setSelectedHierarchy(null);
+                }}
+                onEditAttribute={(entity, attribute) => {
+                  setSelectedAttribute({ entity, attribute });
+                  setSelectedEntity(null);
+                  setSelectedRelation(null);
+                  setSelectedHierarchy(null);
+                }}
+              />
+            ))}
+            {entities
+              .filter((entity) => !entity.associative)
+              .map((entity) => (
+                <ConceptualEntityNode
+                  key={entity.table.name}
+                  entity={entity}
+                  collapsed={Boolean(collapsed[entity.table.name])}
+                  attributeMarks={attributeMarks}
+                  domains={domains}
+                  selectedAttributeKey={selectedAttributeKey}
+                  onStart={start}
+                  onFinishRelation={finishRelation}
+                  onEditEntity={(name) => {
                     setSelectedEntity(null);
                     setSelectedAttribute(null);
                     setSelectedRelation(null);
+                    setSelectedHierarchy(null);
+                    requestEntityEdit(name);
                   }}
-                >
-                  <title>{`${hierarchy.exclusive ? "Exclusiva" : "Solapada"} y ${hierarchy.total ? "total" : "parcial"}. Doble clic para ver opciones.`}</title>
-                  <line
-                    x1={supertype.x}
-                    y1={supertype.y + 29}
-                    x2={centerX}
-                    y2={apexY}
-                    className="hierarchy-edge"
-                  />
-                  <text
-                    x={supertype.x + 12}
-                    y={supertype.y + 43}
-                    textAnchor="start"
-                    className="hierarchy-cardinality"
-                  >
-                    (1,1)
-                  </text>
-                  {children.map((child, index) => {
-                    const baseX = centerX + (index - (children.length - 1) / 2) * 38;
-                    return (
-                      <g key={child.table.name}>
-                        <line
-                          x1={baseX}
-                          y1={apexY}
-                          x2={child.x}
-                          y2={child.y - 30}
-                          className="hierarchy-edge"
-                        />
-                        <text
-                          x={child.x + (child.x < centerX ? -42 : 42)}
-                          y={child.y - 39}
-                          textAnchor="middle"
-                          className="hierarchy-cardinality"
-                        >
-                          (0,1)
-                        </text>
-                      </g>
-                    );
-                  })}
-                  <polygon
-                    points={`${centerX - 34},${apexY} ${centerX + 34},${apexY} ${centerX},${baseY}`}
-                    className="hierarchy-triangle"
-                  />
-                  {hierarchy.exclusive && (
-                    <path
-                      d={`M${centerX - Math.max(90, ...children.map((child) => Math.abs(child.x - centerX) + 24))} ${baseY + 10} Q${centerX} ${baseY + 88} ${centerX + Math.max(90, ...children.map((child) => Math.abs(child.x - centerX) + 24))} ${baseY + 10}`}
-                      className="hierarchy-arc"
-                    />
-                  )}
-                  {hierarchy.total && (
-                    <circle cx={centerX} cy={apexY - 9} r="5" className="hierarchy-total" />
-                  )}
-                </g>
-              );
-            })}
-            {model.relations.map(relation)}
-            {entities
-              .filter((e) => !e.associative)
-              .map((e) => {
-                const attrs = e.table.columns.filter((c) => c.primaryKey || !c.foreignKey);
-                const shown = collapsed[e.table.name] ? attrs.slice(0, 1) : attrs;
-                return (
-                  <g
-                    key={e.table.name}
-                    className="drag-node"
-                    onPointerDown={(event) => start(event, e)}
-                    onPointerUp={(event) => finishRelation(event, e)}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedEntity(null);
-                      setSelectedAttribute(null);
-                      setSelectedRelation(null);
-                      setSelectedHierarchy(null);
-                      requestEntityEdit(e.table.name);
-                    }}
-                  >
-                    <rect
-                      x={e.x - 78}
-                      y={e.y - 28}
-                      width="156"
-                      height="56"
-                      rx="5"
-                      className="entity"
-                      onDoubleClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedEntity(null);
-                        setSelectedAttribute(null);
-                        setSelectedRelation(null);
-                        setSelectedHierarchy(null);
-                        requestEntityEdit(e.table.name);
-                      }}
-                    />
-                    <path d={`M${e.x + 78} ${e.y - 28}v56h-156`} className="entity-emphasis" />
-                    {e.weak && (
-                      <rect
-                        x={e.x - 73}
-                        y={e.y - 23}
-                        width="146"
-                        height="46"
-                        rx="3"
-                        className="weak-entity-inner"
-                      />
-                    )}
-                    <text
-                      x={e.x}
-                      y={e.y + 2}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      alignmentBaseline="central"
-                      className="entity-name"
-                    >
-                      {e.table.name.toLocaleUpperCase("es")}
-                    </text>
-                    {shown.map((c, i) => {
-                      const { x, y, angle } = attributePosition(
-                        e,
-                        i,
-                        shown.length,
-                        attributeAvoidAngles(e),
-                      );
-                      const mark = attributeMarks[`${e.table.name}.${c.name}`];
-                      const composite =
-                        mark?.kind === "composite" || mark?.kind === "multivalued-composite";
-                      const labelX = composite ? x : x + Math.cos(angle) * 18;
-                      const labelY = composite ? y - 14 : y + Math.sin(angle) * 18;
-                      const labelAnchor = composite
-                        ? "middle"
-                        : Math.cos(angle) > 0.35
-                          ? "start"
-                          : Math.cos(angle) < -0.35
-                            ? "end"
-                            : "middle";
-                      const alternate = Boolean(c.alternateKey);
-                      const domain = domains[`${e.table.name}.${c.name}`];
-                      return (
-                        <g
-                          key={c.name}
-                          className={
-                            selectedAttributeKey === [e.table.name, c.name].join(".")
-                              ? "selected-attribute"
-                              : ""
-                          }
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onDoubleClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedEntity(null);
-                            setSelectedRelation(null);
-                            setSelectedHierarchy(null);
-                            requestEntityEdit(e.table.name, c.name);
-                          }}
-                        >
-                          <line
-                            x1={e.x + Math.cos(angle) * 79}
-                            y1={e.y + Math.sin(angle) * 29}
-                            x2={x}
-                            y2={y}
-                            className={`edge ${mark?.kind === "optional" || c.nullable ? "optional-attribute" : ""}`}
-                            markerEnd={
-                              mark?.kind === "multivalued" || mark?.kind === "multivalued-composite"
-                                ? "url(#multi-arrow)"
-                                : undefined
-                            }
-                          />
-                          <circle
-                            cx={x}
-                            cy={y}
-                            r="4"
-                            className={c.primaryKey ? "key-attribute" : "attribute"}
-                          />
-                          {alternate && (
-                            <>
-                              <path
-                                d={`M${x} ${y - 4} A4 4 0 0 0 ${x} ${y + 4} Z`}
-                                className="alternate-key-half"
-                              />
-                              <circle cx={x} cy={y} r="4" className="alternate-key-outline" />
-                            </>
-                          )}
-                          <text
-                            x={labelX}
-                            y={labelY + 3}
-                            textAnchor={labelAnchor}
-                            className="attribute-label"
-                          >
-                            {c.name.slice(0, 18)}
-                          </text>
-                          {domain && (
-                            <g className="domain">
-                              <ellipse
-                                cx={(x + e.x + Math.cos(angle) * 79) / 2}
-                                cy={(y + e.y + Math.sin(angle) * 29) / 2}
-                                rx={Math.max(25, domain.length * 3.8)}
-                                ry="13"
-                                className="domain-oval"
-                              />
-                              <text
-                                x={(x + e.x + Math.cos(angle) * 79) / 2}
-                                y={(y + e.y + Math.sin(angle) * 29) / 2 + 3}
-                                textAnchor="middle"
-                                className="domain-label"
-                              >
-                                {domain}
-                              </text>
-                            </g>
-                          )}
-                          {(mark?.kind === "composite" || mark?.kind === "multivalued-composite") &&
-                            mark.parts.map((part, childIndex) => {
-                              const cx = x + (childIndex - (mark.parts.length - 1) / 2) * 32;
-                              const cy = y + 63;
-                              return (
-                                <g key={`${part}-${childIndex}`}>
-                                  <line x1={x} y1={y + 6} x2={cx} y2={cy - 12} className="edge" />
-                                  <circle cx={cx} cy={cy} r="10" className="attribute" />
-                                  <text
-                                    x={cx}
-                                    y={cy - 19}
-                                    textAnchor="middle"
-                                    className="component-label"
-                                  >
-                                    {part.slice(0, 8)}
-                                  </text>
-                                </g>
-                              );
-                            })}
-                        </g>
-                      );
-                    })}
-                    {attrs.length > 1 && (
-                      <text
-                        x={e.x + 76}
-                        y={e.y - 34}
-                        className="collapse"
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={() =>
-                          setCollapsed((p) => ({ ...p, [e.table.name]: !p[e.table.name] }))
-                        }
-                      >
-                        {collapsed[e.table.name] ? "+" : "−"}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
+                  onEditAttribute={(name, attribute) => {
+                    setSelectedEntity(null);
+                    setSelectedRelation(null);
+                    setSelectedHierarchy(null);
+                    requestEntityEdit(name, attribute);
+                  }}
+                  onToggleCollapsed={(name) =>
+                    setCollapsed((current) => ({ ...current, [name]: !current[name] }))
+                  }
+                  positionAttribute={(item, index, count) =>
+                    attributePosition(item, index, count, attributeAvoidAngles(item))
+                  }
+                />
+              ))}
           </>
         ) : (
           <>
@@ -2575,11 +661,10 @@ export function Diagram({
             {model.logicalRelations.map((r) => {
               const a = point(getEntity(r.left, entities), 0);
               const b = point(getEntity(r.right, entities), 1);
-              const self = r.left.toLowerCase() === r.right.toLowerCase();
+              const self = sameName(r.left, r.right);
               const hierarchyLink = hierarchies.some(
                 (h) =>
-                  h.supertype.toLowerCase() === r.left.toLowerCase() &&
-                  h.subtypes.some((s) => s.toLowerCase() === r.right.toLowerCase()),
+                  sameName(h.supertype, r.left) && h.subtypes.some((s) => sameName(s, r.right)),
               );
               if (hierarchyLink) return null;
               if (self)
@@ -2634,17 +719,13 @@ export function Diagram({
             {entities.map((e) => {
               const { table } = e;
               const inheritedFrom = hierarchies.find((h) =>
-                h.subtypes.some((name) => name.toLowerCase() === table.name.toLowerCase()),
+                h.subtypes.some((name) => sameName(name, table.name)),
               )?.supertype;
               const parentTable = inheritedFrom
-                ? entities.find(
-                    (entity) => entity.table.name.toLowerCase() === inheritedFrom.toLowerCase(),
-                  )?.table
+                ? entities.find((entity) => sameName(entity.table.name, inheritedFrom))?.table
                 : undefined;
               const parentForeignKey = inheritedFrom
-                ? table.foreignKeys.find(
-                    (fk) => fk.table.toLowerCase() === inheritedFrom.toLowerCase(),
-                  )
+                ? table.foreignKeys.find((fk) => sameName(fk.table, inheritedFrom))
                 : undefined;
               const inheritedColumns = new Set(
                 (parentForeignKey?.columns ?? []).map((name) => name.toLowerCase()),
@@ -2667,7 +748,11 @@ export function Diagram({
                 )
                 .map((column) => ({
                   key: column.name,
-                  label: `${column.primaryKey ? "PK " : ""}${column.name}${column.foreignKey ? " FK" : ""}`,
+                  label: [
+                    column.primaryKey ? "PK " : "",
+                    column.name,
+                    column.foreignKey ? " FK" : "",
+                  ].join(""),
                 }));
               const logicalRows = [...inheritedRows, ...ownRows];
               const h = 40 + logicalRows.length * 25;

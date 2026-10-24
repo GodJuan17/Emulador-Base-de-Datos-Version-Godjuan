@@ -1,0 +1,228 @@
+.bottom-dock .model-tool {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: auto;
+  min-width: 112px;
+  height: 48px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  text-align: left;
+}
+.bottom-dock .model-tool > span:nth-child(2) {
+  display: block;
+}
+.bottom-dock .model-tool strong {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.bottom-dock .model-tool small,
+.bottom-dock .model-tool > b {
+  display: none;
+}
+.bottom-dock .tool-shape {
+  width: 25px;
+  height: 21px;
+  flex: 0 0 25px;
+}
+.bottom-dock .relation-shape {
+  width: 17px;
+  height: 17px;
+  flex-basis: 17px;
+}
+.bottom-dock .hierarchy-shape {
+  width: 0;
+  flex-basis: 25px;
+}
+.bottom-dock .arrange-model {
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.exercise-statement {
+  display: none;
+}
+@media (max-width: 900px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    max-height: none;
+    overflow: visible;
+    padding: 12px;
+  }
+  .app-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .statement-panel {
+    min-height: 230px;
+    max-height: 340px;
+  }
+  .app-workspace > .visualizer {
+    min-height: 600px;
+  }
+  .bottom-dock > .designer.tool-palette {
+    overflow-x: auto;
+  }
+  .bottom-dock .model-tools {
+    flex: 0 0 auto;
+  }
+  .bottom-dock .model-tool {
+    min-width: 100px;
+  }
+}
+@media (max-width: 600px) {
+  .app-shell > .topbar h1 {
+    font-size: 18px;
+  }
+  .app-workspace > .visualizer {
+    min-height: 520px;
+  }
+  .bottom-dock > .designer.tool-palette {
+    gap: 7px;
+    padding: 7px;
+  }
+  .bottom-dock .model-tools {
+    gap: 5px;
+  }
+  .bottom-dock .model-tool {
+    min-width: 86px;
+    height: 44px;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .bottom-dock .model-tool strong {
+    font-size: 10px;
+  }
+  .bottom-dock .arrange-model {
+    min-height: 44px;
+    padding: 7px 9px;
+    font-size: 10px;
+  }
+}
+
+/* Editor de entidad con vista previa editable */
+.entity-builder-content {
+  gap: 12px !important;
+  padding-top: 18px !important;
+}
+.entity-preview-surface {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 18px;
+  background: #f7fafb;
+  border: 1px solid #e4ecee;
+  border-radius: 12px;
+}
+.entity-preview-frame {
+  width: min(100%, 560px);
+  padding: 0 14px 12px;
+  background: #fff;
+  border: 2px solid #587987;
+  border-right-width: 5px;
+  border-bottom-width: 5px;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #c3d1d5;
+}
+.entity-preview-name {
+  width: 100%;
+  padding: 13px 8px;
+  border: 0;
+  border-bottom: 1px solid #dce6e8;
+  background: transparent;
+  color: #344f5b;
+  text-align: center;
+  text-transform: uppercase;
+  font:
+    700 16px "DM Sans",
+    sans-serif;
+}
+.entity-preview-name:focus {
+  outline: 0;
+  background: #f7fafb;
+}
+.entity-preview-fields {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+}
+.entity-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 30px;
+  gap: 7px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid #e4ecee;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+.entity-preview-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #dbe4e6;
+  border-radius: 6px;
+  color: #344f5b;
+  font:
+    13px "DM Sans",
+    sans-serif;
+}
+.entity-preview-row.primary {
+  grid-template-columns: 38px minmax(0, 1fr) 100px;
+  align-items: center;
+  background: #f4f8f9;
+}
+.entity-preview-row.primary > span {
+  color: #426879;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+.entity-preview-row.primary > b {
+  color: #6f8188;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+.entity-preview-row.attribute > button {
+  height: 34px;
+  border: 1px solid #e1e8e9;
+  border-radius: 6px;
+  background: #fff;
+  color: #a87979;
+  font-size: 19px;
+  cursor: pointer;
+}
+.entity-preview-options {
+  grid-column: 1/-1;
+  padding-top: 2px;
+  color: #607780;
+  font-size: 12px;
+}
+.entity-preview-options summary {
+  width: max-content;
+  cursor: pointer;
+  color: #587b89;
+  font-size: 11px;
+  font-weight: 650;
+}
+.entity-preview-options .attribute-checks {
+  gap: 8px 14px;
+  margin-top: 9px;
+}
+.entity-preview-options .attribute-checks label {
+  font-size: 11px;
+}
+.entity-preview-options .domain-draft {
+  margin-top: 10px;
+}
+.entity-preview-add {
+  justify-self: start;
+}

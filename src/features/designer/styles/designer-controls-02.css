@@ -1,0 +1,230 @@
+.mode-switch button[aria-pressed="true"] {
+  background: #e9f1f3;
+  color: #3e697b;
+}
+.mode-switch + .minimum-control {
+  margin-left: 0;
+}
+@media (max-width: 1150px) {
+  .design-workspace {
+    grid-template-columns: minmax(380px, 1fr) minmax(0, 1fr);
+  }
+  .column-head,
+  .designer-column {
+    grid-template-columns: minmax(65px, 1fr) minmax(70px, 1fr) minmax(125px, 1.4fr) 18px;
+  }
+  .mode-switch button {
+    padding: 7px;
+  }
+}
+@media (max-width: 920px) {
+  .design-workspace {
+    grid-template-columns: 1fr;
+  }
+  .design-editor {
+    min-height: 420px;
+    max-height: 650px;
+  }
+  .designer-column {
+    grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) minmax(190px, 1.5fr) 20px;
+  }
+}
+@media (max-width: 600px) {
+  .mode-switch {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+  .mode-switch button {
+    flex: 1;
+  }
+  .minimum-control {
+    order: 4;
+    margin-left: 0;
+  }
+  .designer {
+    padding: 12px;
+  }
+  .designer-heading {
+    flex-wrap: wrap;
+  }
+  .column-head {
+    display: none;
+  }
+  .designer-column {
+    grid-template-columns: 1fr 1fr 20px;
+  }
+  .column-options {
+    grid-column: 1/4;
+    grid-row: 2;
+    padding: 2px 0 4px;
+  }
+  .remove-column {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .ddl-preview > header {
+    flex-wrap: wrap;
+  }
+}
+.add-check {
+  margin: 8px 0 0 6px;
+  padding: 6px 8px;
+  border: 1px solid #dce6e8;
+  border-radius: 6px;
+  background: white;
+  color: #587989;
+  font:
+    500 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.check-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.check-row {
+  display: flex;
+  align-items: end;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid #e2eaec;
+  border-radius: 7px;
+  background: white;
+}
+.check-row label {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  color: #687c83;
+  font-size: 9px;
+}
+.check-row input {
+  min-width: 0;
+  border: 1px solid #dce5e7;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font:
+    11px "IBM Plex Mono",
+    monospace;
+  color: #334b55;
+}
+.check-row button {
+  border: 0;
+  background: transparent;
+  color: #9a6464;
+  font-size: 17px;
+  cursor: pointer;
+}
+.transform-nm {
+  display: block;
+  margin: 0 0 8px;
+  padding: 7px 9px;
+  border: 1px solid #c9dce2;
+  border-radius: 7px;
+  background: #eef5f6;
+  color: #406878;
+  font:
+    600 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.transform-nm:hover {
+  background: #e3eff2;
+}
+.attribute-editor-heading,
+.designer-attribute {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(65px, 0.75fr) minmax(110px, 1.3fr) 22px;
+  gap: 5px;
+  align-items: center;
+}
+.attribute-editor-heading {
+  padding: 5px 0;
+  color: #819096;
+  font-size: 9px;
+  font-weight: 700;
+}
+.designer-attribute {
+  padding: 7px 0;
+  border-top: 1px solid #edf1f2;
+}
+.designer-attribute input:not([type="checkbox"]),
+.designer-attribute select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #dbe4e6;
+  border-radius: 6px;
+  padding: 6px;
+  background: white;
+  color: #364b55;
+  font:
+    10px "DM Sans",
+    sans-serif;
+}
+.designer-attribute .remove-column {
+  grid-column: 4;
+  grid-row: 1;
+  border: 0;
+  background: transparent;
+  color: #a87979;
+  font-size: 16px;
+  cursor: pointer;
+}
+.column-options {
+  grid-column: 1/5;
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 2px 0 3px;
+}
+.column-options label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #60747b;
+  font-size: 9px;
+}
+.column-options input {
+  accent-color: #527f91;
+}
+.column-options select {
+  width: auto;
+  max-width: 125px;
+}
+.attribute-parts {
+  grid-column: 1/5;
+  display: grid;
+  gap: 4px;
+  color: #73858b;
+  font-size: 9px;
+}
+.attribute-parts input {
+  width: 100%;
+  border: 1px solid #dbe4e6;
+  border-radius: 6px;
+  padding: 6px;
+  font:
+    10px "DM Sans",
+    sans-serif;
+}
+.designer-table .add-column,
+.designer-table .add-check,
+.designer-table .transform-nm,
+.add-table {
+  border: 1px solid #dce5e7;
+  border-radius: 7px;
+  background: white;
+  padding: 7px 9px;
+  color: #507382;
+  font:
+    600 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+  margin: 6px 5px 0 0;
+}
+.tool-palette {
+  height: 100%;
+}

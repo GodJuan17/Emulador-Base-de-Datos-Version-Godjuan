@@ -1,0 +1,220 @@
+.entity-attribute-card > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.entity-attribute-card strong {
+  font-size: 10px;
+  color: #405b65;
+  overflow-wrap: anywhere;
+}
+.entity-attribute-card small {
+  font-size: 9px;
+  color: #87969b;
+  overflow-wrap: anywhere;
+}
+.entity-attribute-card button {
+  flex: 0 0 auto;
+  border: 1px solid #dce6e8;
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: white;
+  color: #547987;
+  font:
+    600 9px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.mini-editor-modal {
+  width: min(480px, 100%);
+}
+.mini-editor-modal .attribute-checks {
+  margin: 0;
+}
+.mini-editor-modal .attribute-checks input[type="radio"] {
+  accent-color: #527f91;
+}
+.designer-modal .form-field {
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.designer-modal .form-field input,
+.designer-modal .form-field select {
+  font-size: 14px;
+  padding: 10px 11px;
+}
+.designer-modal .form-field small {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.designer-modal .attribute-draft-title {
+  gap: 6px;
+  font-size: 13px;
+}
+.designer-modal .attribute-draft-title small {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.designer-modal .attribute-draft {
+  padding: 13px;
+  display: grid;
+  gap: 8px;
+}
+.designer-modal .attribute-draft-main input {
+  font-size: 13px;
+  padding: 9px;
+}
+.designer-modal .attribute-checks {
+  gap: 10px 16px;
+  margin-top: 5px;
+}
+.designer-modal .attribute-checks label,
+.designer-modal .attribute-check label {
+  font-size: 12px;
+  gap: 6px;
+}
+.designer-modal .attribute-classifications {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.designer-modal .attribute-classifications summary {
+  padding: 2px 0 5px;
+}
+.designer-modal .domain-draft {
+  margin-top: 6px;
+}
+.designer-modal .add-draft-attribute,
+.designer-modal > footer button {
+  font-size: 12px;
+}
+
+.primary-key-draft {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #e2eaec;
+  border-radius: 9px;
+  background: #fbfcfc;
+}
+.primary-key-draft .form-field {
+  font-size: 11px;
+}
+
+.arrange-model {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  border-color: #cbdde2;
+  background: #eaf3f5;
+  font-size: 12px;
+  font-weight: 700;
+}
+.arrange-model:hover {
+  border-color: #86aab6;
+  background: #e0eef1;
+}
+.app-shell {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  max-height: 100vh;
+  margin: 0;
+  padding: 14px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.app-shell > .topbar {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+.app-workspace {
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+}
+.statement-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e5ebed;
+  border-radius: 13px;
+  box-shadow: 0 4px 18px #34475008;
+}
+.statement-panel header {
+  margin-bottom: 12px;
+}
+.statement-panel h2 {
+  margin: 0;
+  color: #344f5b;
+  font-size: 15px;
+}
+.statement-panel p {
+  margin: 5px 0 0;
+  color: #849198;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.statement-panel textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: 13px;
+  border: 1px solid #dce5e7;
+  border-radius: 8px;
+  background: #fbfcfc;
+  color: #344952;
+  font:
+    13px/1.65 "DM Sans",
+    sans-serif;
+}
+.statement-panel textarea:focus {
+  outline: 2px solid #b7d1da;
+  border-color: #6e9aaa;
+}
+.statement-panel > small {
+  margin-top: 9px;
+  color: #8b999e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.app-workspace > .visualizer {
+  min-height: 0;
+  min-width: 0;
+}
+.bottom-dock {
+  z-index: 15;
+  flex: 0 0 auto;
+  margin-top: 10px;
+}
+.bottom-dock > .designer.tool-palette {
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #dce5e7;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 5px 22px #263e4918;
+}
+.bottom-dock .designer-heading,
+.bottom-dock .palette-summary {
+  display: none;
+}
+.bottom-dock .model-tools {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}

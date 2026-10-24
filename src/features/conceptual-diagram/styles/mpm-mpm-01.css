@@ -1,0 +1,229 @@
+/* Ajustes de lectura y referencias visibles de MPM1999. */
+:root {
+  font-size: 15px;
+}
+.topbar h1 {
+  font-size: 24px;
+}
+.eyebrow {
+  font-size: 11px;
+}
+.editor-heading h2,
+.warnings h2 {
+  font-size: 15px;
+}
+.editor-heading p {
+  font-size: 12px;
+}
+.editor textarea {
+  font-size: 12px;
+  line-height: 1.85;
+}
+.tabs button {
+  font-size: 13px;
+}
+.entity-name {
+  font-size: 16px;
+}
+.relation-name {
+  font-size: 12px;
+}
+.ratio {
+  font-size: 12px;
+}
+.cardinality {
+  font-size: 11px;
+}
+.attribute-label {
+  font-size: 10px;
+}
+.key-label {
+  font-size: 10px;
+}
+.symbol-tag {
+  font-size: 8px;
+  font-weight: 700;
+  fill: #fff;
+  pointer-events: none;
+}
+.attribute-cardinality {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #5f7882;
+}
+.derived-attribute {
+  stroke-dasharray: 4 3;
+}
+.multivalued-attribute {
+  fill: none;
+  stroke: #7e98a2;
+  stroke-width: 1.3;
+}
+.component-label {
+  font-size: 7px;
+  fill: #536b75;
+  pointer-events: none;
+}
+.weak-entity-inner {
+  fill: none;
+  stroke: var(--color-entity-border);
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+.diamond-inner {
+  fill: none;
+  stroke: #638595;
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+.table-title {
+  font-size: 14px;
+}
+.table-column {
+  font-size: 12px;
+}
+.logic-cardinality {
+  font-size: 13px;
+}
+.mpm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px 15px;
+  padding: 12px 15px;
+  border-top: 1px solid #e9eff0;
+  color: #63767e;
+  font-size: 11px;
+}
+.mpm-legend > strong {
+  width: 100%;
+  font-size: 12px;
+  color: #3d5965;
+}
+.mpm-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mpm-legend small {
+  flex-basis: 100%;
+  color: #8a969b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.legend-ip,
+.legend-ia,
+.legend-derived,
+.legend-relation {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 9px;
+}
+.legend-ip {
+  background: #293f49;
+  color: white;
+}
+.legend-ia {
+  border: 1.5px solid #718d98;
+  color: #4a6773;
+}
+.legend-derived {
+  border: 1.5px dashed #718d98;
+  color: #4a6773;
+}
+.legend-relation {
+  border-radius: 5px;
+  background: #edf3f4;
+  color: #4a6773;
+  padding: 0 5px;
+}
+.legend-multi {
+  width: 20px;
+  height: 14px;
+  border: 1.3px solid #718d98;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px white,
+    0 0 0 3px #718d98;
+}
+.legend-composite {
+  width: 22px;
+  height: 18px;
+  border-left: 1px solid #8399a3;
+  position: relative;
+}
+.legend-composite:before,
+.legend-composite:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 10px;
+  border-top: 1px solid #8399a3;
+}
+.legend-composite:before {
+  top: 3px;
+}
+.legend-composite:after {
+  bottom: 3px;
+}
+@media (max-width: 600px) {
+  .topbar h1 {
+    font-size: 20px;
+  }
+  .mpm-legend {
+    gap: 8px 12px;
+  }
+  .mpm-legend span {
+    font-size: 10px;
+  }
+}
+.optional-attribute {
+  stroke-dasharray: 4 3;
+}
+.entity-emphasis {
+  fill: none;
+  stroke: var(--color-entity-border);
+  stroke-width: 3;
+  pointer-events: none;
+}
+.relation-symbol {
+  font-size: 8px;
+  font-weight: 700;
+  fill: #587583;
+}
+.diagram-actions {
+  display: flex;
+  gap: 7px;
+}
+.diagram-actions button {
+  border: 1px solid #dce4e6;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: white;
+  color: #536d78;
+  font: 500 11px inherit;
+  cursor: pointer;
+}
+.hierarchy-edge {
+  stroke: #647e88;
+  stroke-width: 1.6;
+  fill: none;
+}
+.hierarchy-triangle {
+  fill: #fff;
+  stroke: var(--color-entity-border);
+  stroke-width: 2;
+}
+.hierarchy-arc {
+  fill: none;
+  stroke: var(--color-entity-border);
+  stroke-width: 2;
+}
+.hierarchy-total {
+  fill: #fff;
+  stroke: var(--color-entity-border);
+  stroke-width: 1.6;
+}

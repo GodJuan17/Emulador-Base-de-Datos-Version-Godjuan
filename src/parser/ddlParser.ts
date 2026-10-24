@@ -1,3 +1,4 @@
+import { sameName } from "../domain/names";
 export type DependencyMark = "E" | "ID";
 export type WeakCardinality = "0:N" | "1:N" | "0:1" | "1:1";
 export type DeleteAction = "CASCADE" | "RESTRICT" | "SET NULL" | "NO ACTION";
@@ -235,7 +236,7 @@ export function parseDDL(source: string): ParseResult {
   }
   for (const table of tables.values()) {
     for (const key of table.primaryKey) {
-      const col = table.columns.find((c) => c.name.toLowerCase() === key.toLowerCase());
+      const col = table.columns.find((c) => sameName(c.name, key));
       if (col) {
         col.primaryKey = true;
         col.nullable = false;
@@ -243,7 +244,7 @@ export function parseDDL(source: string): ParseResult {
     }
     for (const key of table.uniqueKeys) {
       if (key.length === 1) {
-        const col = table.columns.find((c) => c.name.toLowerCase() === key[0].toLowerCase());
+        const col = table.columns.find((c) => sameName(c.name, key[0]));
         if (col) col.unique = true;
       }
     }
@@ -256,7 +257,7 @@ export function parseDDL(source: string): ParseResult {
     });
     table.foreignKeys.forEach((fk) =>
       fk.columns.forEach((name) => {
-        const col = table.columns.find((c) => c.name.toLowerCase() === name.toLowerCase());
+        const col = table.columns.find((c) => sameName(c.name, name));
         if (col)
           col.foreignKey = {
             table: fk.table,

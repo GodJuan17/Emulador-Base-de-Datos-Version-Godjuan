@@ -1,0 +1,227 @@
+.preview-cardinality {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  height: 28px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: #fff;
+  color: #55717d;
+  font:
+    11px "DM Sans",
+    sans-serif;
+  white-space: nowrap;
+}
+.preview-cardinality select {
+  width: 23px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #36535f;
+  font: inherit;
+  cursor: pointer;
+}
+.relation-attribute-row {
+  display: flex;
+  gap: 6px;
+  margin: 5px 0;
+}
+.relation-attribute-row input {
+  flex: 1;
+  min-width: 0;
+}
+.relation-attribute-row button {
+  width: 34px;
+  border: 1px solid #dce6e9;
+  border-radius: 7px;
+  background: #fff;
+  color: #718791;
+  cursor: pointer;
+}
+.relation-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.relation-preview-editor {
+  position: relative;
+  padding-bottom: 40px !important;
+}
+.relation-preview-heading h4 {
+  margin: 0;
+}
+.recursive-chip,
+.relation-kind-badge {
+  padding: 5px 9px;
+  border: 1px solid #cbdde2;
+  border-radius: 999px;
+  background: #f5fafb;
+  color: #426d7a;
+  font-size: 11px;
+  font-weight: 700;
+}
+.relation-binary-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(42px, 10vw, 76px);
+  width: 100%;
+  min-width: 0;
+  min-height: 210px;
+  padding: 24px 4px;
+}
+.relation-binary-layout::before {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 8%;
+  width: 84%;
+  border-top: 2px solid #77939d;
+  content: "";
+}
+.relation-end-preview {
+  position: relative;
+  z-index: 2;
+  display: block;
+  min-width: 0;
+  min-height: 145px;
+}
+.relation-end-preview > small {
+  position: absolute;
+  top: calc(50% - 43px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.relation-end-preview > .relation-picker-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.relation-end-preview > .relation-cardinality-wrap {
+  position: absolute;
+  top: calc(50% + 36px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.relation-end-preview:last-child {
+  grid-column: 3;
+}
+.relation-picker-wrap,
+.relation-cardinality-wrap {
+  position: relative;
+}
+.relation-entity-picker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 142px);
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px;
+  border: 1.5px solid #6d8d99;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 2px 2px 0 #c5d4d9;
+  color: #36535f;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.relation-entity-picker span {
+  color: #77919a;
+}
+.relation-popover {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 230px;
+  transform: translateX(-50%);
+  padding: 9px;
+  border: 1px solid #cfdee2;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 8px 24px #25475226;
+}
+.relation-search {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid #dbe5e7;
+  border-radius: 6px;
+  color: #36535f;
+  font:
+    12px "DM Sans",
+    sans-serif;
+  outline: none;
+}
+.relation-entity-options {
+  display: grid;
+  max-height: 170px;
+  overflow: auto;
+  margin-top: 6px;
+}
+.relation-entity-options button,
+.cardinality-popover button {
+  padding: 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #405d68;
+  text-align: left;
+  font:
+    12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.relation-entity-options button:hover,
+.cardinality-popover button:hover,
+.cardinality-popover button.active {
+  background: #edf5f7;
+  color: #315f70;
+}
+.relation-entity-options small {
+  padding: 8px;
+  color: #82949a;
+  font-size: 11px;
+}
+.relation-cardinality-button {
+  padding: 6px 9px;
+  border: 1px solid #cbdde2;
+  border-radius: 7px;
+  background: #fff;
+  color: #456d79;
+  font:
+    600 12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.cardinality-popover {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 164px;
+}
+.cardinality-popover button {
+  text-align: center;
+}
+.relation-swap-button {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cfdee2;
+  border-radius: 50%;
+  background: #fff;
+  color: #4e7784;
+  font-size: 16px;
+  cursor: pointer;
+}

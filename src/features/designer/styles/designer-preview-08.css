@@ -1,0 +1,217 @@
+.entity-draft-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e5ecee;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.entity-draft-item:hover,
+.entity-draft-item.selected {
+  border-color: #83a9b6;
+  background: #f5fafb;
+}
+.entity-draft-item > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.entity-draft-item strong {
+  overflow: hidden;
+  color: #3d5863;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entity-draft-item small {
+  color: #86959a;
+  font-size: 10px;
+}
+.draft-key-dot {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border: 1.5px solid #77909a;
+  border-radius: 50%;
+  background: white;
+}
+.draft-key-dot.primary {
+  border-color: #293f49;
+  background: #293f49;
+}
+.draft-key-dot.alternate {
+  background: linear-gradient(90deg, #293f49 50%, #fff 50%);
+}
+.selected-draft-editor {
+  display: grid;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid #e2eaec;
+  border-radius: 9px;
+  background: #fbfcfc;
+}
+.selected-draft-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #47636e;
+  font-size: 12px;
+}
+.remove-selected-draft {
+  border: 0;
+  background: transparent;
+  color: #a35b5b;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.selected-draft-editor .form-field {
+  font-size: 11px;
+}
+.selected-draft-editor .form-field input {
+  font-size: 13px;
+}
+.selected-draft-editor .attribute-checks {
+  gap: 8px 12px;
+}
+.selected-draft-editor .attribute-checks label {
+  font-size: 11px;
+}
+.selected-draft-editor .attribute-classifications {
+  margin: 0;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .designer-modal:has(.entity-builder-content) {
+    width: min(620px, 100%);
+  }
+  .entity-builder-content {
+    grid-template-columns: 1fr;
+  }
+  .entity-attribute-editor {
+    max-height: none;
+  }
+  .entity-preview-column {
+    min-height: 0;
+  }
+}
+.designer-modal:has(.entity-preview-form) {
+  width: min(1120px, 100%);
+}
+.entity-preview-form {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 18px !important;
+  max-height: min(72vh, 680px);
+  overflow: auto;
+}
+.entity-preview-form > .relationship-preview,
+.entity-preview-form > .diagram-kind-preview {
+  flex: 1 1 60%;
+  min-width: 0;
+  position: static;
+  align-self: flex-start;
+  padding: 14px;
+  border: 1px solid #e3ebed;
+  border-radius: 11px;
+  background: #fff;
+}
+.entity-preview-form > .entity-preview-fields {
+  flex: 1 1 40%;
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  padding: 2px 5px 2px 0;
+}
+.relationship-preview > h4 {
+  margin: 0 0 8px;
+  color: #36535f;
+  font-size: 14px;
+}
+.relationship-preview svg,
+.diagram-kind-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.relation-kind-result {
+  padding: 10px 12px;
+  border: 1px solid #dce8eb;
+  border-radius: 8px;
+  background: #f6fafb;
+  color: #55717d;
+  font-size: 12px;
+}
+.relation-kind-result strong {
+  color: #315b6b;
+}
+.diagram-kind-preview {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid #e3ebed;
+  border-radius: 9px;
+  background: #fff;
+}
+.diagram-kind-preview > strong {
+  color: #36535f;
+  font-size: 13px;
+}
+.diagram-kind-preview > small {
+  color: #849399;
+  font-size: 10px;
+}
+.diagram-mini-menu:has(.diagram-kind-preview) {
+  width: min(760px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+}
+@media (max-width: 760px) {
+  .designer-modal:has(.entity-preview-form) {
+    width: min(640px, 100%);
+  }
+  .entity-preview-form {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    max-height: 74vh;
+  }
+  .entity-preview-form > .relationship-preview,
+  .entity-preview-form > .diagram-kind-preview {
+    position: static;
+  }
+  .entity-preview-form > .entity-preview-fields {
+    max-height: none;
+  }
+}
+.entity-preview-form > .relationship-preview svg {
+  overflow: visible;
+}
+.relation-diamond-input {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 3px 1px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #36535f;
+  text-align: center;
+  font:
+    600 12px "DM Sans",
+    sans-serif;
+  outline: none;
+}
+.relation-diamond-input:focus {
+  border-color: #8eabb5;
+  background: #fff;
+}

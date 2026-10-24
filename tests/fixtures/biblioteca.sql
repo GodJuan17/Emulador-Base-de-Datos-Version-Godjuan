@@ -1,0 +1,18 @@
+CREATE TABLE Libro (
+  id INTEGER PRIMARY KEY,
+  titulo VARCHAR(160) NOT NULL
+);
+
+CREATE TABLE Socio (
+  id INTEGER PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL,
+  correo VARCHAR(180) UNIQUE
+);
+
+CREATE TABLE Prestamo (
+  id INTEGER PRIMARY KEY,
+  libro_id INTEGER NOT NULL REFERENCES Libro(id),
+  socio_id INTEGER NOT NULL REFERENCES Socio(id),
+  fecha DATE NOT NULL,
+  CONSTRAINT prestamo_fecha_ck CHECK (fecha > DATE '2000-01-01')
+);

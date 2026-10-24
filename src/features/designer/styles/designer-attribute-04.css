@@ -1,0 +1,229 @@
+.attribute-checks label,
+.attribute-check label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #61777f;
+  font-size: 10px;
+}
+.attribute-checks input,
+.attribute-check input {
+  margin: 0;
+  accent-color: #527f91;
+}
+.attribute-classifications {
+  margin-top: 8px;
+  color: #607780;
+  font-size: 10px;
+}
+.attribute-classifications summary {
+  cursor: pointer;
+}
+.classification-checks {
+  gap: 6px 10px;
+}
+.parts-input {
+  margin-top: 8px;
+  font-size: 10px;
+}
+.add-draft-attribute {
+  justify-self: start;
+  padding: 7px 10px;
+  border: 1px dashed #b8cbd1;
+  border-radius: 7px;
+  background: #f9fcfc;
+  color: #527b89;
+  font:
+    600 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.relation-endpoints {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.attribute-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #60777f;
+  font-size: 10px;
+}
+.designer-error {
+  margin: 0;
+  padding: 9px 20px;
+  color: #9c5555;
+  background: #fff8f7;
+  font-size: 10px;
+}
+.designer-modal > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #edf1f2;
+}
+.designer-modal > footer button {
+  padding: 8px 12px;
+  border-radius: 7px;
+  font:
+    600 10px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.modal-cancel {
+  border: 1px solid #dce5e7;
+  background: white;
+  color: #65777e;
+}
+.modal-save {
+  border: 1px solid #456f82;
+  background: #456f82;
+  color: white;
+}
+.design-workspace {
+  grid-template-columns: minmax(250px, 285px) minmax(0, 1fr);
+  gap: 14px;
+}
+.tool-palette {
+  padding: 13px;
+}
+.tool-palette .designer-heading {
+  margin-bottom: 12px;
+}
+.model-tools {
+  gap: 8px;
+}
+.model-tool {
+  padding: 9px 10px;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  gap: 8px;
+}
+.palette-summary {
+  margin-top: 16px;
+  padding-top: 11px;
+}
+.weak-entity-shape {
+  width: 25px;
+  height: 20px;
+  border: 2px solid #678795;
+  background: #fff;
+  position: relative;
+}
+.weak-entity-shape:after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid #678795;
+}
+.model-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (max-width: 1150px) {
+  .design-workspace {
+    grid-template-columns: minmax(240px, 270px) minmax(0, 1fr);
+  }
+}
+@media (max-width: 920px) {
+  .design-workspace {
+    grid-template-columns: 1fr;
+  }
+  .tool-palette {
+    padding: 13px;
+  }
+}
+.relation-hint {
+  color: #849399;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.arrange-model {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #dce7e9;
+  border-radius: 8px;
+  background: #f6fafb;
+  color: #4f7686;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.arrange-model:hover {
+  border-color: #91b3bd;
+  background: #edf5f6;
+}
+.arrange-model:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.entity-card-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+.entity-card {
+  border: 1px solid #e2eaec;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.entity-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  list-style: none;
+  cursor: pointer;
+}
+.entity-card > summary::-webkit-details-marker {
+  display: none;
+}
+.entity-card > summary:after {
+  content: "⌄";
+  color: #78909a;
+  font-size: 14px;
+}
+.entity-card > summary span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.entity-card > summary strong {
+  color: #344f5b;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.entity-card > summary small {
+  color: #87969b;
+  font-size: 9px;
+}
+.entity-card-attributes {
+  display: grid;
+  gap: 5px;
+  padding: 0 8px 8px;
+  border-top: 1px solid #edf1f2;
+}
+.entity-attribute-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #edf1f2;
+  border-radius: 7px;
+  background: #fafcfc;
+  cursor: pointer;
+}
+.entity-attribute-card:hover {
+  border-color: #b7cbd1;
+  background: #f5f9fa;
+}

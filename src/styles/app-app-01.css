@@ -1,0 +1,228 @@
+:root {
+  font-family: "DM Sans", system-ui, sans-serif;
+  color: var(--color-text);
+  background: var(--color-app-background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  font-weight: 400;
+  font-size: 14px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+.app {
+  max-width: 1680px;
+  margin: auto;
+  padding: 27px 34px 22px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--color-brand);
+  color: white;
+  font-size: 19px;
+  font-weight: 700;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: #7b8b92;
+  margin: 0 0 3px;
+}
+.topbar h1 {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+.history-controls {
+  display: flex;
+  gap: 7px;
+  margin-left: auto;
+}
+.history-controls button {
+  padding: 8px 11px;
+  border: 1px solid #d7e2e5;
+  border-radius: 7px;
+  background: #fff;
+  color: #456674;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.history-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.minimum-control {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #566a73;
+}
+.minimum-control select {
+  font: inherit;
+  background: #fff;
+  border: 1px solid #dce4e6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #344952;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(270px, 330px) minmax(0, 1fr);
+  gap: 15px;
+  min-height: calc(100vh - 230px);
+}
+.editor,
+.visualizer,
+.warnings {
+  background: #fff;
+  border: 1px solid #e5ebed;
+  border-radius: 13px;
+  box-shadow: 0 4px 18px #34475008;
+}
+.editor {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-height: 560px;
+}
+.editor-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+.editor-heading h2,
+.warnings h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.editor-heading p {
+  font-size: 11px;
+  color: #85939a;
+  margin: 5px 0 14px;
+}
+.quiet,
+.diagram-toolbar button {
+  border: 1px solid #dce4e6;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: white;
+  color: #63757c;
+  font: 500 11px inherit;
+  cursor: pointer;
+}
+.editor textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 360px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #e1e8ea;
+  border-radius: 8px;
+  background: #fbfcfc;
+  color: #3d5058;
+  font:
+    11px/1.8 "IBM Plex Mono",
+    monospace;
+  tab-size: 2;
+}
+.editor footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #849198;
+  font-size: 10px;
+  padding-top: 12px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #56a783;
+}
+.visualizer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.tabs {
+  display: flex;
+  align-items: stretch;
+  padding: 0 12px;
+  border-bottom: 1px solid #eaf0f1;
+  gap: 5px;
+}
+.tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 14px 12px 12px;
+  color: #7b898e;
+  font:
+    600 12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.tabs button[aria-selected="true"] {
+  color: #355f70;
+  border-bottom-color: #568399;
+}
+.tabs button span {
+  font-size: 9px;
+  border-radius: 4px;
+  background: #eef3f4;
+  padding: 3px 5px;
+  margin-left: 4px;
+}
+.counts {
+  align-self: center;
+  margin-left: auto;
+  color: #89969b;
+  font-size: 10px;
+}
+.diagram-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.diagram-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 13px;
+  color: #819096;
+  font-size: 10px;
+}
+.diagram-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 490px;
+  background-color: #fbfcfc;
+  background-image: radial-gradient(#dfe7e9 0.7px, transparent 0.7px);
+  background-size: 17px 17px;
+  touch-action: none;
+}

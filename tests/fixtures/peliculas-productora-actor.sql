@@ -1,0 +1,22 @@
+CREATE TABLE Productora (
+  id INTEGER PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL
+);
+
+CREATE TABLE Pelicula (
+  id INTEGER PRIMARY KEY,
+  titulo VARCHAR(160) NOT NULL,
+  productora_id INTEGER NOT NULL REFERENCES Productora(id) ON DELETE CASCADE
+);
+
+CREATE TABLE Actor (
+  id INTEGER PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL
+);
+
+CREATE TABLE PeliculaActor (
+  pelicula_id INTEGER NOT NULL REFERENCES Pelicula(id) ON DELETE CASCADE,
+  actor_id INTEGER NOT NULL REFERENCES Actor(id) ON DELETE CASCADE,
+  personaje VARCHAR(120),
+  PRIMARY KEY (pelicula_id, actor_id)
+);

@@ -33,7 +33,7 @@ export function App() {
     }
     if (draft.kind === "N:M") {
       const relationName = draft.name.trim() || `${source.name}_${target.name}`; if (tables.some(table => table.name.toLowerCase() === relationName.toLowerCase())) return false;
-      const first = columnsFor({ ...source, columns: [] }, source, true); const second = columnsFor({ ...target, columns: first.columns }, target, true);
+      const first = columnsFor({ ...source, columns: [] }, source, true); const second = columnsFor({ ...target, columns: first.columns }, target, true); if (draft.roles) { first.foreignKey.roles = draft.roles; second.foreignKey.roles = draft.roles; } if (draft.participantMaximums) { first.foreignKey.participantMaximums = draft.participantMaximums; second.foreignKey.participantMaximums = draft.participantMaximums; }
       const columns = [...first.columns, ...second.columns].map(column => ({ ...column, primaryKey: true, nullable: false })); const foreignKeys = [first.foreignKey, second.foreignKey];
       const extra = (draft.attributes ?? []).map(name => ({ name, type: "TEXT", nullable: true, primaryKey: false, unique: false }));
       if (new Set([...columns, ...extra].map(column => column.name.toLowerCase())).size !== columns.length + extra.length) return false;
@@ -41,7 +41,7 @@ export function App() {
       if (draft.participantMinimums) setCardinalityMinimums(current => ({ ...current, [`assoc:${relationName.toLowerCase()}`]: draft.participantMinimums! }));
       return true;
     }
-    const owner = target; const referenced = source; const addition = columnsFor(owner, referenced, draft.mandatory);
+    const owner = target; const referenced = source; const addition = columnsFor(owner, referenced, draft.mandatory); if (draft.roles) addition.foreignKey.roles = draft.roles; if (draft.participantMaximums) addition.foreignKey.participantMaximums = draft.participantMaximums;
     const extra = (draft.attributes ?? []).map(name => ({ name, type: "TEXT", nullable: true, primaryKey: false, unique: false }));
     if (new Set([...owner.columns, ...addition.columns, ...extra].map(column => column.name.toLowerCase())).size !== owner.columns.length + addition.columns.length + extra.length) return false;
     const nextColumns = [...owner.columns, ...addition.columns, ...extra]; const nextTable = { ...owner, columns: nextColumns, uniqueKeys: draft.kind === "1:1" ? [...owner.uniqueKeys, addition.foreignKey.columns] : owner.uniqueKeys, foreignKeys: [...owner.foreignKeys, addition.foreignKey] };
@@ -51,6 +51,17 @@ export function App() {
     if (draft.participantMinimums) setCardinalityMinimums(current => ({ ...current, [relationId]: draft.participantMinimums! }));
     setRelationAttributes(current => ({ ...current, [relationId]: draft.attributes ?? [] }));
     return true;
+  };
+  const updateRelationRoles = (id: string, roles: [string, string]) => {
+    if (id.startsWith("assoc:")) {
+      const tableName = id.slice("assoc:".length);
+      setTables(current => current.map(table => table.name.toLowerCase() === tableName ? { ...table, foreignKeys: table.foreignKeys.map(foreignKey => ({ ...foreignKey, roles })) } : table));
+      return;
+    }
+    const match = id.match(/^fk:([^:]+):(.+)$/);
+    if (!match) return;
+    const [, ownerName, fkColumns] = match;
+    setTables(current => current.map(table => table.name.toLowerCase() === ownerName ? { ...table, foreignKeys: table.foreignKeys.map(foreignKey => foreignKey.columns.map(column => column.toLowerCase()).join(",") === fkColumns ? { ...foreignKey, roles } : foreignKey) } : table));
   };
   const editRelation = (id: string, changes: { kind?: RelationDraft["kind"]; mandatory?: boolean; weakCardinality?: import("./parser/ddlParser").WeakCardinality }): boolean => {
     const relation = model.relations.find(item => item.id === id);
@@ -157,7 +168,7 @@ export function App() {
   };
   return <main className="app app-shell"><header className="topbar"><div className="brand-mark">P</div><div><p className="eyebrow">DATABASE EMULATOR</p><h1>Diseña tu modelo de datos</h1></div></header>
     <section className="workspace design-workspace app-workspace"><aside className="statement-panel"><header><div><h2>Enunciado del ejercicio</h2><p>Describe aquí el problema que vas a modelar.</p></div></header><textarea value={exerciseStatement} onChange={event => setExerciseStatement(event.target.value)} placeholder="Escribe el enunciado del ejercicio…" aria-label="Enunciado del ejercicio"/><small>Se guardará automáticamente y aparecerá antes de la solución al exportar el PDF.</small></aside>
-      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} exerciseStatement={exerciseStatement} cardinalityMinimums={cardinalityMinimums} setCardinalityMinimums={setCardinalityMinimums} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} editRelation={editRelation} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} requestEntityEdit={(name, attribute) => setCanvasEditRequest(current => ({ entity: name, attribute, token: (current?.token ?? 0) + 1 }))} entityRenameRequest={entityRenameRequest} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section>
+      <section className="visualizer"><nav className="tabs" role="tablist" aria-label="Modelos"><button role="tab" aria-selected={tab === "conceptual"} onClick={() => setTab("conceptual")}>Modelo conceptual <span>MER</span></button><button role="tab" aria-selected={tab === "logical"} onClick={() => setTab("logical")}>Modelo lógico</button><button role="tab" aria-selected={tab === "ddl"} onClick={() => setTab("ddl")}>DDL generado</button><span className="counts">{model.entities.length} entidades · {model.relations.length} relaciones</span></nav><div style={{ display: tab === "ddl" ? "none" : "contents" }} aria-hidden={tab === "ddl"}><Diagram model={model} conceptual={tab === "conceptual"} exerciseStatement={exerciseStatement} cardinalityMinimums={cardinalityMinimums} setCardinalityMinimums={setCardinalityMinimums} names={names} rename={(id, value) => setNames(p => ({ ...p, [id]: value }))} editRelation={editRelation} updateRelationRoles={updateRelationRoles} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} hierarchyRequest={hierarchyRequest} arrangeRequest={arrangeRequest} renameEntity={renameEntity} requestEntityEdit={(name, attribute) => setCanvasEditRequest(current => ({ entity: name, attribute, token: (current?.token ?? 0) + 1 }))} entityRenameRequest={entityRenameRequest} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} deleteRelation={deleteRelation}/></div>{tab === "ddl" && <DDLPreview source={outputDDL}/>}</section>
     </section><div className="bottom-dock" aria-label="Herramientas para crear el modelo"><Designer tables={tables} onChange={setTables} attributeMarks={attributeMarks} setAttributeMarks={setAttributeMarks} domains={domains} setDomains={setDomains} createRelation={createRelation} requestHierarchy={() => setHierarchyRequest(value => value + 1)} requestArrange={() => setArrangeRequest(value => value + 1)} renameEntity={renameEntity} deleteEntity={deleteEntity} addAttribute={addAttribute} editAttribute={editAttribute} deleteAttribute={deleteAttribute} editRequest={canvasEditRequest} onEditRequestHandled={token => setCanvasEditRequest(current => current?.token === token ? null : current)} onEntityRenamed={(oldName, newName) => setEntityRenameRequest(current => ({ oldName, newName, token: (current?.token ?? 0) + 1 }))}/></div>
   </main>;
 }

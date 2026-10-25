@@ -176,6 +176,61 @@
   max-height: 88vh;
   overflow: auto;
 }
+.hierarchy-preview-select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: 0 !important;
+  border-radius: 4px;
+  padding: 4px 7px !important;
+  background: rgb(255 255 255 / 94%);
+  color: #405e69;
+  text-align: center;
+  font:
+    12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.hierarchy-preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.hierarchy-preview-controls > div {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #dce6e9;
+  border-radius: 9px;
+  background: #f8fbfc;
+}
+.hierarchy-preview-controls button,
+.hierarchy-add-subtype {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #607983;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+.hierarchy-preview-controls button[aria-pressed="true"] {
+  border-color: #d4e4e8;
+  background: #e8f2f4;
+  color: #315f6e;
+}
+.hierarchy-add-subtype {
+  justify-self: center;
+  border-color: #ccdde2;
+  border-style: dashed;
+}
+.hierarchy-add-subtype:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 @media (max-width: 760px) {
   .designer-modal:has(.entity-preview-form) {
     width: min(640px, 100%);

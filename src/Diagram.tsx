@@ -329,13 +329,12 @@ export function Diagram({
     .filter((entity) => !entity.associative)
     .map((entity) => entity.table.name);
   const saveHierarchy = () => {
-    if (
-      availableEntities.length < 3 ||
-      !hierarchyDraft.supertype ||
-      hierarchyDraft.subtypes.length < 2
-    )
-      return;
-    setHierarchies((current) => [...current, { id: "hierarchy-" + Date.now(), ...hierarchyDraft }]);
+    const subtypes = hierarchyDraft.subtypes.filter(Boolean);
+    if (availableEntities.length < 3 || !hierarchyDraft.supertype || subtypes.length < 2) return;
+    setHierarchies((current) => [
+      ...current,
+      { id: "hierarchy-" + Date.now(), ...hierarchyDraft, subtypes },
+    ]);
     setHierarchyOpen(false);
     setHierarchyDraft({ supertype: "", subtypes: [], exclusive: false, total: false });
   };
@@ -458,9 +457,6 @@ export function Diagram({
         selectedHierarchyModel={selectedHierarchyModel}
         availableEntities={availableEntities}
         setSelectedHierarchy={setSelectedHierarchy}
-        setSelectedEntity={setSelectedEntity}
-        setSelectedAttribute={setSelectedAttribute}
-        setSelectedRelation={setSelectedRelation}
       />
       <RelationCreateDialog
         relationDraft={relationDraft}

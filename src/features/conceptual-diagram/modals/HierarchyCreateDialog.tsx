@@ -44,81 +44,36 @@ export function HierarchyCreateDialog({
           <HierarchyPreview
             supertype={hierarchyDraft.supertype}
             subtypes={hierarchyDraft.subtypes}
+            availableEntities={availableEntities}
             exclusive={hierarchyDraft.exclusive}
             total={hierarchyDraft.total}
+            onSupertypeChange={(supertype) =>
+              setHierarchyDraft((current) => ({
+                ...current,
+                supertype,
+                subtypes: current.subtypes.filter((name) => name !== supertype),
+              }))
+            }
+            onSubtypeChange={(index, name) =>
+              setHierarchyDraft((current) => {
+                const subtypes = [...current.subtypes];
+                while (subtypes.length <= index) subtypes.push("");
+                if (name) subtypes[index] = name;
+                else if (subtypes.length > 2) subtypes.splice(index, 1);
+                return { ...current, subtypes };
+              })
+            }
+            onExclusiveChange={(exclusive) =>
+              setHierarchyDraft((current) => ({ ...current, exclusive }))
+            }
+            onTotalChange={(total) => setHierarchyDraft((current) => ({ ...current, total }))}
           />
-          <label>
-            Supertipo
-            <select
-              value={hierarchyDraft.supertype}
-              onChange={(event) =>
-                setHierarchyDraft((current) => ({
-                  ...current,
-                  supertype: event.target.value,
-                  subtypes: current.subtypes.filter((name) => name !== event.target.value),
-                }))
-              }
-            >
-              {availableEntities.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <fieldset>
-            <legend>Subtipos (elige dos o más)</legend>
-            <div className="hierarchy-options">
-              {availableEntities
-                .filter((name) => name !== hierarchyDraft.supertype)
-                .map((name) => (
-                  <label key={name}>
-                    <input
-                      type="checkbox"
-                      checked={hierarchyDraft.subtypes.includes(name)}
-                      onChange={(event) =>
-                        setHierarchyDraft((current) => ({
-                          ...current,
-                          subtypes: event.target.checked
-                            ? [...current.subtypes, name]
-                            : current.subtypes.filter((item) => item !== name),
-                        }))
-                      }
-                    />
-                    {name}
-                  </label>
-                ))}
-            </div>
-          </fieldset>
-          <div className="hierarchy-options">
-            <label>
-              <input
-                type="checkbox"
-                checked={hierarchyDraft.exclusive}
-                onChange={(event) =>
-                  setHierarchyDraft((current) => ({
-                    ...current,
-                    exclusive: event.target.checked,
-                  }))
-                }
-              />
-              Exclusiva · arco de exclusividad
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={hierarchyDraft.total}
-                onChange={(event) =>
-                  setHierarchyDraft((current) => ({ ...current, total: event.target.checked }))
-                }
-              />
-              Total (círculo)
-            </label>
-          </div>
           <button
             className="inspector-primary"
             type="button"
-            disabled={hierarchyDraft.subtypes.length < 2}
+            disabled={
+              !hierarchyDraft.supertype || hierarchyDraft.subtypes.filter(Boolean).length < 2
+            }
             onClick={saveHierarchy}
           >
             Añadir jerarquía

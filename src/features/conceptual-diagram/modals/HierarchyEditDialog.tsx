@@ -2,16 +2,15 @@ import type { Dispatch, SetStateAction } from "react";
 import type { Hierarchy } from "../../../model";
 import type { DiagramProps } from "../../../Diagram";
 import { HierarchyPreview } from "../previews/HierarchyPreview";
+
 type Props = {
   diagram: DiagramProps;
   selectedHierarchy: string | null;
   selectedHierarchyModel: Hierarchy | undefined;
   availableEntities: string[];
   setSelectedHierarchy: Dispatch<SetStateAction<string | null>>;
-  setSelectedEntity: Dispatch<SetStateAction<string | null>>;
-  setSelectedAttribute: Dispatch<SetStateAction<{ entity: string; attribute: string } | null>>;
-  setSelectedRelation: Dispatch<SetStateAction<string | null>>;
 };
+
 export function HierarchyEditDialog({
   diagram,
   selectedHierarchy,
@@ -48,106 +47,49 @@ export function HierarchyEditDialog({
           <HierarchyPreview
             supertype={selectedHierarchyModel.supertype}
             subtypes={selectedHierarchyModel.subtypes}
+            availableEntities={availableEntities}
             exclusive={selectedHierarchyModel.exclusive}
             total={selectedHierarchyModel.total}
+            onSupertypeChange={(supertype) =>
+              setHierarchies((current) =>
+                current.map((item) =>
+                  item.id === selectedHierarchy
+                    ? {
+                        ...item,
+                        supertype,
+                        subtypes: [...new Set([...item.subtypes, item.supertype])].filter(
+                          (name) => name !== supertype,
+                        ),
+                      }
+                    : item,
+                ),
+              )
+            }
+            onSubtypeChange={(index, name) =>
+              setHierarchies((current) =>
+                current.map((item) => {
+                  if (item.id !== selectedHierarchy) return item;
+                  if (!name && item.subtypes.length <= 2) return item;
+                  const subtypes = [...item.subtypes];
+                  if (name) subtypes[index] = name;
+                  else subtypes.splice(index, 1);
+                  return { ...item, subtypes: [...new Set(subtypes.filter(Boolean))] };
+                }),
+              )
+            }
+            onExclusiveChange={(exclusive) =>
+              setHierarchies((current) =>
+                current.map((item) =>
+                  item.id === selectedHierarchy ? { ...item, exclusive } : item,
+                ),
+              )
+            }
+            onTotalChange={(total) =>
+              setHierarchies((current) =>
+                current.map((item) => (item.id === selectedHierarchy ? { ...item, total } : item)),
+              )
+            }
           />
-          <label className="inspector-field">
-            Supertipo
-            <select
-              value={selectedHierarchyModel.supertype}
-              onChange={(event) => {
-                const supertype = event.target.value;
-                setHierarchies((current) =>
-                  current.map((item) =>
-                    item.id === selectedHierarchy
-                      ? {
-                          ...item,
-                          supertype,
-                          subtypes: [...item.subtypes, item.supertype].filter(
-                            (name) => name !== supertype,
-                          ),
-                        }
-                      : item,
-                  ),
-                );
-              }}
-            >
-              <option value="">Seleccionar entidad</option>
-              {availableEntities.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <fieldset>
-            <legend>Subtipos (elige dos o más)</legend>
-            <div className="hierarchy-options">
-              {availableEntities
-                .filter((name) => name !== selectedHierarchyModel.supertype)
-                .map((name) => (
-                  <label key={name}>
-                    <input
-                      type="checkbox"
-                      checked={selectedHierarchyModel.subtypes.includes(name)}
-                      disabled={
-                        selectedHierarchyModel.subtypes.includes(name) &&
-                        selectedHierarchyModel.subtypes.length <= 2
-                      }
-                      onChange={(event) =>
-                        setHierarchies((current) =>
-                          current.map((item) =>
-                            item.id !== selectedHierarchy
-                              ? item
-                              : {
-                                  ...item,
-                                  subtypes: event.target.checked
-                                    ? [...item.subtypes, name]
-                                    : item.subtypes.filter((subtype) => subtype !== name),
-                                },
-                          ),
-                        )
-                      }
-                    />
-                    {name}
-                  </label>
-                ))}
-            </div>
-          </fieldset>
-          <div className="hierarchy-options">
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedHierarchyModel.exclusive}
-                onChange={(event) =>
-                  setHierarchies((current) =>
-                    current.map((item) =>
-                      item.id === selectedHierarchy
-                        ? { ...item, exclusive: event.target.checked }
-                        : item,
-                    ),
-                  )
-                }
-              />
-              Exclusiva · arco
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedHierarchyModel.total}
-                onChange={(event) =>
-                  setHierarchies((current) =>
-                    current.map((item) =>
-                      item.id === selectedHierarchy
-                        ? { ...item, total: event.target.checked }
-                        : item,
-                    ),
-                  )
-                }
-              />
-              Total · círculo
-            </label>
-          </div>
           <button
             type="button"
             className="inspector-danger"

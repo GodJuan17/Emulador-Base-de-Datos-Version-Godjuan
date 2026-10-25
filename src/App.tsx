@@ -64,10 +64,16 @@ export function App() {
     newName: string;
     token: number;
   } | null>(null);
-  const model = useMemo(
-    () => toDiagram({ tables, warnings: [] }, hierarchies),
-    [tables, hierarchies],
-  );
+  const model = useMemo(() => {
+    const diagram = toDiagram({ tables, warnings: [] }, hierarchies);
+    return {
+      ...diagram,
+      relations: diagram.relations.map((relation) => ({
+        ...relation,
+        attributes: relationAttributes[relation.id] ?? relation.attributes,
+      })),
+    };
+  }, [tables, hierarchies, relationAttributes]);
   const outputDDL = useMemo(() => generateDDL(tables, hierarchies), [tables, hierarchies]);
   const createRelation = (draft: RelationDraft): boolean => {
     const result = createRelationOperation(domainState(), draft);

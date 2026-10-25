@@ -16,6 +16,53 @@ type Props = {
   onEditAttribute: (entity: string, attribute: string) => void;
 };
 
+type RelationAttributeProps = {
+  attributes: string[];
+  relationName: string;
+  centerX: number;
+  centerY: number;
+  diamondRadius: number;
+  onEditAttribute: (entity: string, attribute: string) => void;
+};
+
+function RelationAttributeNodes({
+  attributes,
+  relationName,
+  centerX,
+  centerY,
+  diamondRadius,
+  onEditAttribute,
+}: RelationAttributeProps) {
+  const widths = attributes.map((attribute) => Math.max(54, attribute.length * 6 + 18));
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+  let offset = -totalWidth / 2;
+  const y = centerY + diamondRadius + 40;
+
+  return (
+    <g className="relation-attributes">
+      {attributes.map((attribute, index) => {
+        const x = centerX + offset + 5;
+        offset += widths[index];
+        return (
+          <g
+            key={attribute}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              onEditAttribute(relationName, attribute);
+            }}
+          >
+            <line x1={centerX} y1={centerY + diamondRadius} x2={x} y2={y} className="edge" />
+            <circle cx={x} cy={y} r="4" className="attribute" />
+            <text x={x + 9} y={y + 3} textAnchor="start" className="attribute-label">
+              {attribute.slice(0, 18)}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 export function RelationshipNode({
   relation: r,
   entities,
@@ -62,15 +109,14 @@ export function RelationshipNode({
         <text x={mx} y={my - 47} textAnchor="middle" className="ratio">
           {participants.length === 3 ? "Ternaria" : "Cuaternaria"}
         </text>
-        {r.attributes.map((attr, i) => (
-          <g key={attr}>
-            <line x1={mx} y1={my + 49} x2={mx} y2={my + 66 + i * 32} className="edge" />
-            <circle cx={mx} cy={my + 77 + i * 32} r="22" className="attribute" />
-            <text x={mx} y={my + 80 + i * 32} textAnchor="middle" className="attribute-label">
-              {attr}
-            </text>
-          </g>
-        ))}
+        <RelationAttributeNodes
+          attributes={r.attributes}
+          relationName={r.name}
+          centerX={mx}
+          centerY={my}
+          diamondRadius={49}
+          onEditAttribute={onEditAttribute}
+        />
       </g>
     );
   }
@@ -187,21 +233,14 @@ export function RelationshipNode({
       <text x={mx} y={my - 47} textAnchor="middle" className="ratio">
         {ratio}
       </text>
-      {r.attributes.map((attr, i) => (
-        <g
-          key={attr}
-          onDoubleClick={(event) => {
-            event.stopPropagation();
-            onEditAttribute(r.name, attr);
-          }}
-        >
-          <line x1={mx} y1={my + 39} x2={mx} y2={my + 64 + i * 35} className="edge" />
-          <circle cx={mx} cy={my + 75 + i * 35} r="22" className="attribute" />
-          <text x={mx} y={my + 79 + i * 35} textAnchor="middle" className="attribute-label">
-            {attr}
-          </text>
-        </g>
-      ))}
+      <RelationAttributeNodes
+        attributes={r.attributes}
+        relationName={r.name}
+        centerX={mx}
+        centerY={my}
+        diamondRadius={39}
+        onEditAttribute={onEditAttribute}
+      />
     </g>
   );
 }

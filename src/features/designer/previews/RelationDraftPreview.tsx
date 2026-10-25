@@ -235,6 +235,7 @@ export function RelationDraftPreview({
               </div>
             ))}
             {diamond}
+            <RelationAttributesPreview attributes={attributes} />
           </div>
           {canAdd && (
             <button type="button" className="add-draft-attribute" onClick={addParticipant}>
@@ -249,6 +250,7 @@ export function RelationDraftPreview({
             <div className="recursive-card top">{cardinality(0)}</div>
             <div className="recursive-card bottom">{cardinality(1)}</div>
             {diamond}
+            <RelationAttributesPreview attributes={attributes} placement="recursive" />
           </div>
         </div>
       ) : (
@@ -264,6 +266,7 @@ export function RelationDraftPreview({
             {choose(1)}
             {cardinality(1)}
           </div>
+          <RelationAttributesPreview attributes={attributes} />
         </div>
       )}
       {mode === "binary" && (
@@ -284,7 +287,6 @@ export function RelationDraftPreview({
           ⇄
         </button>
       )}
-      <RelationAttributesPreview attributes={attributes} />
     </section>
   );
 }

@@ -198,12 +198,25 @@
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-.relation-preview-editor > .relation-attribute-svg {
+.relation-attributes-preview {
+  position: absolute;
+  z-index: 2;
+  top: calc(50% + 39px);
+  left: 50%;
+  width: max-content;
+  max-width: min(90vw, 520px);
+  transform: translateX(-50%);
+  overflow: visible;
+  pointer-events: none;
+}
+.relation-attributes-preview.recursive {
+  left: 87.5%;
+}
+.relation-attributes-preview svg {
   display: block;
-  width: 100%;
-  height: 65px;
+  max-width: 100%;
   overflow: visible;
 }
-.relation-preview-editor > .relation-attribute-svg .draft-preview-label {
+.relation-attributes-preview .draft-preview-label {
   font-size: 10px;
 }

@@ -900,41 +900,41 @@ export function Designer({
                 ×
               </button>
             </header>
-            dialog === "entity" ? (
-            <EntityDialogForm
-              entityName={entityName}
-              setEntityName={setEntityName}
-              attributes={attributes}
-              setAttributes={setAttributes}
-              selectedDraftAttribute={selectedDraftAttribute}
-              setSelectedDraftAttribute={setSelectedDraftAttribute}
-              editingDraftAttribute={editingDraftAttribute}
-              setEditingDraftAttribute={setEditingDraftAttribute}
-              emptyAttribute={emptyAttribute}
-              selectedDraft={selectedDraft}
-              updateAttribute={updateAttribute}
-            />
+            {dialog === "entity" ? (
+              <EntityDialogForm
+                entityName={entityName}
+                setEntityName={setEntityName}
+                attributes={attributes}
+                setAttributes={setAttributes}
+                selectedDraftAttribute={selectedDraftAttribute}
+                setSelectedDraftAttribute={setSelectedDraftAttribute}
+                editingDraftAttribute={editingDraftAttribute}
+                setEditingDraftAttribute={setEditingDraftAttribute}
+                emptyAttribute={emptyAttribute}
+                selectedDraft={selectedDraft}
+                updateAttribute={updateAttribute}
+              />
             ) : dialog === "weak" ? (
-            <WeakEntityDialogForm
-              weakDraft={weakDraft}
-              setWeakDraft={setWeakDraft}
-              weakAttributes={weakAttributes}
-              setWeakAttributes={setWeakAttributes}
-              tables={tables}
-              emptyAttribute={emptyAttribute}
-            />
+              <WeakEntityDialogForm
+                weakDraft={weakDraft}
+                setWeakDraft={setWeakDraft}
+                weakAttributes={weakAttributes}
+                setWeakAttributes={setWeakAttributes}
+                tables={tables}
+                emptyAttribute={emptyAttribute}
+              />
             ) : (
-            <RelationDialogForm
-              relation={relation}
-              setRelation={setRelation}
-              relationMode={relationMode}
-              changeRelationMode={changeRelationMode}
-              setAdditionalParticipant={setAdditionalParticipant}
-              addParticipant={addParticipant}
-              removeParticipant={removeParticipant}
-              tables={tables}
-            />
-            )
+              <RelationDialogForm
+                relation={relation}
+                setRelation={setRelation}
+                relationMode={relationMode}
+                changeRelationMode={changeRelationMode}
+                setAdditionalParticipant={setAdditionalParticipant}
+                addParticipant={addParticipant}
+                removeParticipant={removeParticipant}
+                tables={tables}
+              />
+            )}
             {error && (
               <p className="designer-error" role="alert">
                 {error}
@@ -977,41 +977,13 @@ export function Designer({
                       : saveRelation
                 }
               >
-                dialog === "entity" ? (
-                <EntityDialogForm
-                  entityName={entityName}
-                  setEntityName={setEntityName}
-                  attributes={attributes}
-                  setAttributes={setAttributes}
-                  selectedDraftAttribute={selectedDraftAttribute}
-                  setSelectedDraftAttribute={setSelectedDraftAttribute}
-                  editingDraftAttribute={editingDraftAttribute}
-                  setEditingDraftAttribute={setEditingDraftAttribute}
-                  emptyAttribute={emptyAttribute}
-                  selectedDraft={selectedDraft}
-                  updateAttribute={updateAttribute}
-                />
-                ) : dialog === "weak" ? (
-                <WeakEntityDialogForm
-                  weakDraft={weakDraft}
-                  setWeakDraft={setWeakDraft}
-                  weakAttributes={weakAttributes}
-                  setWeakAttributes={setWeakAttributes}
-                  tables={tables}
-                  emptyAttribute={emptyAttribute}
-                />
-                ) : (
-                <RelationDialogForm
-                  relation={relation}
-                  setRelation={setRelation}
-                  relationMode={relationMode}
-                  changeRelationMode={changeRelationMode}
-                  setAdditionalParticipant={setAdditionalParticipant}
-                  addParticipant={addParticipant}
-                  removeParticipant={removeParticipant}
-                  tables={tables}
-                />
-                )
+                {dialog === "entity"
+                  ? editingEntityName
+                    ? "Guardar cambios"
+                    : "Crear entidad"
+                  : dialog === "weak"
+                    ? "Crear entidad débil"
+                    : "Crear interrelación"}
               </button>
             </footer>
           </section>

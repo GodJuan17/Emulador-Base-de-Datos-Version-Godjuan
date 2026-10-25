@@ -68,6 +68,10 @@ export function HierarchyCreateDialog({
             }
             onTotalChange={(total) => setHierarchyDraft((current) => ({ ...current, total }))}
           />
+          <p className="hierarchy-key-warning" role="note">
+            La PK propia de cada subtipo se sustituye por la PK heredada del supertipo en el modelo
+            lógico.
+          </p>
           <button
             className="inspector-primary"
             type="button"

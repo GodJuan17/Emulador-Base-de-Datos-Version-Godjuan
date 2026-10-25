@@ -16,6 +16,7 @@ export type AppState = {
   relationAttributes: Record<string, string[]>;
   hierarchies: HierarchyRecord[];
   positions: CanvasPositions;
+  logicalPositions: CanvasPositions;
   view: CanvasView;
   collapsed: Record<string, boolean>;
 };
@@ -33,6 +34,7 @@ export const INITIAL_APP_STATE: AppState = {
   relationAttributes: {},
   hierarchies: [],
   positions: {},
+  logicalPositions: {},
   view: INITIAL_VIEW,
   collapsed: {},
 };

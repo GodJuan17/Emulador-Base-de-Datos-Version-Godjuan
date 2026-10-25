@@ -78,6 +78,15 @@
   stroke: #d0dcdf;
   stroke-width: 1;
 }
+.table-key-separator {
+  stroke: #d0dcdf;
+  stroke-width: 1;
+}
+.table-key-mark {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #557683;
+}
 .table-title {
   font-size: 12px;
   font-weight: 700;

@@ -24,6 +24,7 @@ export type ForeignKey = {
   onDelete?: DeleteAction;
   weakCardinality?: WeakCardinality;
   partialIdentifier?: string;
+  partialIdentifiers?: string[];
   relationName?: string;
   roles?: [string, string];
   participantMaximums?: ("1" | "n")[];

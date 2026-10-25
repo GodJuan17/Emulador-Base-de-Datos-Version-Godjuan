@@ -35,8 +35,22 @@ export function WeakEntityDialogForm({
         relationName={weakDraft.relationName}
         dependency={weakDraft.dependency}
         cardinality={weakDraft.cardinality}
-        identifier={weakDraft.identifier}
+        identifier={
+          weakDraft.dependency === "ID" ? `id_${weakDraft.name || "entidad"}` : weakDraft.identifier
+        }
         attributes={weakAttributes.map((attribute) => attribute.name || "atributo")}
+        discriminants={weakAttributes
+          .filter((attribute) => attribute.primaryKey)
+          .map((attribute) => attribute.name)}
+        parents={tables.filter((table) => table.primaryKey.length > 0).map((table) => table.name)}
+        onParentChange={(parent) => setWeakDraft((current) => ({ ...current, parent }))}
+        onRelationNameChange={(relationName) =>
+          setWeakDraft((current) => ({ ...current, relationName }))
+        }
+        onDependencyChange={(dependency) => setWeakDraft((current) => ({ ...current, dependency }))}
+        onCardinalityChange={(cardinality) =>
+          setWeakDraft((current) => ({ ...current, cardinality }))
+        }
       />
       <div className="entity-preview-fields">
         <label className="form-field">
@@ -50,72 +64,9 @@ export function WeakEntityDialogForm({
             placeholder="Familiar"
           />
         </label>
-        <label className="form-field">
-          Entidad fuerte
-          <select
-            value={weakDraft.parent}
-            onChange={(event) =>
-              setWeakDraft((current) => ({ ...current, parent: event.target.value }))
-            }
-          >
-            <option value="">Seleccionar entidad fuerte</option>
-            {tables
-              .filter((table) => table.primaryKey.length > 0)
-              .map((table) => (
-                <option key={table.name} value={table.name}>
-                  {table.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label className="form-field">
-          Tipo de identificación
-          <select
-            value={weakDraft.dependency}
-            onChange={(event) =>
-              setWeakDraft((current) => ({
-                ...current,
-                dependency: event.target.value as DependencyMark,
-              }))
-            }
-          >
-            <option value="E">Por existencia (E)</option>
-            <option value="ID">Por identificación (ID)</option>
-          </select>
-        </label>
-        <label className="form-field">
-          Nombre de la relación
-          <input
-            value={weakDraft.relationName}
-            onChange={(event) =>
-              setWeakDraft((current) => ({
-                ...current,
-                relationName: event.target.value,
-              }))
-            }
-            placeholder="pertenece"
-          />
-        </label>
-        <label className="form-field">
-          Cardinalidad junto a la entidad débil
-          <select
-            value={weakDraft.cardinality}
-            onChange={(event) =>
-              setWeakDraft((current) => ({
-                ...current,
-                cardinality: event.target.value as WeakCardinality,
-              }))
-            }
-          >
-            <option value="0:N">(0,n)</option>
-            <option value="1:N">(1,n)</option>
-            <option value="0:1">(0,1)</option>
-            <option value="1:1">(1,1)</option>
-          </select>
-        </label>
         {weakDraft.dependency === "E" ? (
           <label className="form-field">
-            {weakDraft.dependency === "E" ? "Nombre de la llave propia" : "Identificador parcial"}
+            Nombre de la llave propia
             <input
               value={weakDraft.identifier}
               onChange={(event) =>
@@ -124,12 +75,16 @@ export function WeakEntityDialogForm({
                   identifier: event.target.value,
                 }))
               }
-              placeholder={weakDraft.dependency === "E" ? "id" : "nro_linea"}
+              placeholder="id"
             />
           </label>
+        ) : !weakDraft.cardinality.endsWith(":1") ? (
+          <small className="weak-id-hint">
+            Marca como discriminante cada atributo que complete la clave del padre.
+          </small>
         ) : (
           <small className="weak-id-hint">
-            La PK de la entidad débil será la misma clave heredada de la entidad fuerte.
+            En una relación 1:1, la clave de la entidad fuerte identifica a la entidad débil.
           </small>
         )}
         <div className="attribute-draft-title">
@@ -174,6 +129,24 @@ export function WeakEntityDialogForm({
                 </button>
               </div>
               <div className="attribute-checks">
+                {weakDraft.dependency === "ID" && !weakDraft.cardinality.endsWith(":1") && (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={attribute.primaryKey}
+                      onChange={(event) =>
+                        setWeakAttributes((current) =>
+                          current.map((item, i) =>
+                            i === index
+                              ? { ...item, primaryKey: event.target.checked, required: true }
+                              : item,
+                          ),
+                        )
+                      }
+                    />{" "}
+                    Discriminante
+                  </label>
+                )}
                 <label>
                   <input
                     type="checkbox"

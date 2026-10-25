@@ -107,7 +107,7 @@ export function Designer({
     parent: "",
     dependency: "ID" as DependencyMark,
     cardinality: "0:N" as WeakCardinality,
-    identifier: "id",
+    identifier: "",
     relationName: "",
     attributes: "",
   });
@@ -239,7 +239,7 @@ export function Designer({
       parent: parent?.name ?? "",
       dependency: "ID",
       cardinality: "0:N",
-      identifier: "id",
+      identifier: "",
       relationName: "",
       attributes: "",
     });
@@ -254,6 +254,12 @@ export function Designer({
     const identifying = weakDraft.dependency === "ID";
     const maxOne = weakDraft.cardinality.endsWith(":1");
     const needsIdentifier = !identifying;
+    const discriminants =
+      identifying && !maxOne
+        ? weakAttributes
+            .filter((attribute) => attribute.primaryKey)
+            .map((attribute) => attribute.name.trim())
+        : [];
     if (!name) {
       setError("Escribe un nombre para la entidad débil.");
       return;
@@ -270,6 +276,10 @@ export function Designer({
       setError("Escribe el identificador propio de la entidad débil.");
       return;
     }
+    if (identifying && !maxOne && !discriminants.length) {
+      setError("Marca al menos un atributo como discriminante para la identificación.");
+      return;
+    }
     const parentColumns = parent.primaryKey
       .map((key) => parent.columns.find((column) => sameName(column.name, key)))
       .filter((column): column is Column => Boolean(column));
@@ -282,7 +292,10 @@ export function Designer({
         weakDraft.dependency === "E" ? `${parent.name.toLowerCase()}_${column.name}` : column.name;
       let foreignName = base;
       let suffix = 2;
-      while (needsIdentifier && sameName(identifier, foreignName))
+      while (
+        (needsIdentifier && sameName(identifier, foreignName)) ||
+        discriminants.some((discriminant) => sameName(discriminant, foreignName))
+      )
         foreignName = `${base}_${suffix++}`;
       return {
         name: foreignName,
@@ -325,8 +338,8 @@ export function Designer({
       .map((attribute) => ({
         name: attribute.name.trim(),
         type: attribute.type.trim() || "TEXT",
-        nullable: !attribute.required,
-        primaryKey: false,
+        nullable: !(identifying && !maxOne && attribute.primaryKey) && !attribute.required,
+        primaryKey: identifying && !maxOne && attribute.primaryKey,
         unique: attribute.unique || attribute.alternateKey,
         alternateKey: attribute.alternateKey,
       }));
@@ -343,6 +356,7 @@ export function Designer({
       dependency: weakDraft.dependency,
       onDelete: "CASCADE",
       weakCardinality: weakDraft.cardinality,
+      partialIdentifiers: discriminants,
       relationName,
     };
     const uniqueKeys = maxOne && !identifying ? [foreignKey.columns] : [];
@@ -607,14 +621,10 @@ export function Designer({
     const recursive =
       participants.length === 2 &&
       participants[0].toLocaleLowerCase() === participants[1].toLocaleLowerCase();
-    const name = relation.name.trim();
-    if (!name) {
-      setError("Escribe el nombre de la interrelación.");
-      return;
-    }
     const reverse =
       participants.length === 2 && relation.maximums[0] === "n" && relation.maximums[1] === "1";
     const kind = participants.length > 2 ? "N:M" : relationKindFromMaximums(relation.maximums);
+    const name = relation.name.trim() || "tiene";
     const orderedParticipants = reverse ? [relation.target, relation.source] : participants;
     const participantMinimums = relation.minimums.slice(0, participants.length);
     if (reverse)
@@ -638,6 +648,10 @@ export function Designer({
       kind,
       mandatory: kind !== "N:M" && participantMinimums[1] === 1,
       name,
+      associativeTableName:
+        kind === "N:M" && participants.length === 2
+          ? `${relation.source}_${relation.target}`
+          : undefined,
       roles: recursive
         ? ((reverse ? [...relation.roles].reverse() : relation.roles).map((role) =>
             role.trim(),

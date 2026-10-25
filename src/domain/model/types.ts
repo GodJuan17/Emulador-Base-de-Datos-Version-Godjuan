@@ -23,6 +23,7 @@ export type RelationDraft = {
   participantMaximums?: ("1" | "n")[];
   roles?: [string, string];
   name: string;
+  associativeTableName?: string;
   kind: RelationKind;
   mandatory: boolean;
   attributes?: string[];

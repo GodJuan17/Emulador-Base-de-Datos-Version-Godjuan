@@ -61,6 +61,16 @@
   border-radius: 50%;
   background: linear-gradient(90deg, #293f49 50%, #fff 50%);
 }
+.hierarchy-key-warning {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid #eadbb5;
+  border-radius: 7px;
+  background: #fffaf0;
+  color: #7d6740;
+  font-size: 11px;
+  line-height: 1.4;
+}
 .legend-uk {
   font-size: 10px;
   color: #536b75;

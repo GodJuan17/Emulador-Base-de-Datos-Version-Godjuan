@@ -77,6 +77,14 @@ export function RelationshipNode({
     const points = participants.map((name, index) => point(getEntity(name, entities), index));
     const mx = points.reduce((sum, p) => sum + p.x, 0) / points.length,
       my = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+    let manyIndex = 0;
+    const manyLabels = ["N", "M", "P", "Q"];
+    const ratio = participants
+      .map((_, index) => {
+        const maximum = r.participantMaximums?.[index] ?? "n";
+        return maximum === "1" ? "1" : (manyLabels[manyIndex++] ?? "N");
+      })
+      .join(":");
     const openRelationEditor = () => onEditRelation(r.id);
     return (
       <g key={r.id}>
@@ -90,7 +98,7 @@ export function RelationshipNode({
             <g key={`${r.id}:${participants[index]}`}>
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} className="edge" />
               <text x={lx} y={ly} textAnchor="middle" className="cardinality">
-                ({relationMinimum(r, index)},n)
+                ({relationMinimum(r, index)},{relationMaximum(r, index)})
               </text>
             </g>
           );
@@ -107,7 +115,7 @@ export function RelationshipNode({
           {(names[r.id] ?? r.name).slice(0, 15)}
         </text>
         <text x={mx} y={my - 47} textAnchor="middle" className="ratio">
-          {participants.length === 3 ? "Ternaria" : "Cuaternaria"}
+          {ratio}
         </text>
         <RelationAttributeNodes
           attributes={r.attributes}

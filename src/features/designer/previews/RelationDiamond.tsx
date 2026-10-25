@@ -40,7 +40,7 @@ export function RelationDiamond({ name, ratio, onNameChange }: Props) {
                 }
                 if (event.key === "Escape") cancel();
               }}
-              onBlur={() => setEditing(false)}
+              onBlur={confirm}
             />
           ) : (
             <button

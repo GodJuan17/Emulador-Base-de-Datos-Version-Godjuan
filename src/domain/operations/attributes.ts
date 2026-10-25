@@ -124,6 +124,10 @@ function updateAttributeReferences(
     foreignKeys: table.foreignKeys.map((foreignKey) => ({
       ...foreignKey,
       columns: foreignKey.columns.map(mapColumn),
+      partialIdentifier: foreignKey.partialIdentifier
+        ? mapColumn(foreignKey.partialIdentifier)
+        : undefined,
+      partialIdentifiers: foreignKey.partialIdentifiers?.map(mapColumn),
       targetColumns:
         foreignKey.table === table.name
           ? foreignKey.targetColumns?.map(mapColumn)
@@ -169,6 +173,18 @@ function validateAttributeDeletion(
     return failure(
       "primary-key-required",
       "No puedes eliminar la única columna de la clave primaria.",
+    );
+  }
+  if (
+    table.foreignKeys.some((foreignKey) =>
+      (foreignKey.partialIdentifiers ?? [foreignKey.partialIdentifier].filter(Boolean)).some(
+        (identifier) => identifier && sameName(identifier, name),
+      ),
+    )
+  ) {
+    return failure(
+      "attribute-is-discriminator",
+      "No puedes eliminar un atributo discriminante mientras identifique a la entidad débil.",
     );
   }
   if (

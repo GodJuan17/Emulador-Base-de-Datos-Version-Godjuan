@@ -13,6 +13,7 @@ export type Entity = {
 export type Relation = RelationshipSnapshot;
 export type DiagramModel = {
   entities: Entity[];
+  logicalEntities: Entity[];
   relations: Relation[];
   logicalRelations: Relation[];
   warnings: string[];
@@ -41,6 +42,7 @@ export function toDiagram(parsed: ParseResult, hierarchies: HierarchyRecord[] = 
   const conceptual = createConceptualRelations(parsed.tables, associativeNames);
   return {
     entities,
+    logicalEntities: entities,
     relations: conceptual.relations,
     logicalRelations,
     hierarchies,
@@ -127,7 +129,7 @@ function createLogicalRelation(
     attributes: [],
     foreignKeyNullable: nullable,
     identifying,
-    dependency: foreignKey.dependency ?? (identifying ? "ID" : !nullable ? "E" : undefined),
+    dependency: foreignKey.dependency,
   };
 }
 
@@ -156,7 +158,7 @@ function createAssociativeRelation(table: Table): Relation | undefined {
   if (participants.length < 2) return undefined;
   return {
     id: `assoc:${normalizeName(table.name)}`,
-    name: table.name,
+    name: table.foreignKeys[0].relationName ?? table.name,
     left: participants[0],
     right: participants[1],
     participants,
@@ -186,8 +188,7 @@ function createConceptualRelation(
     (primaryKey) => !foreignKey.columns.some((column) => sameName(column, primaryKey)),
   );
   const nullable = fkNullable(table, foreignKey.columns);
-  const dependency =
-    foreignKey.dependency ?? (foreignKeyInPrimaryKey ? "ID" : !nullable ? "E" : undefined);
+  const dependency = foreignKey.dependency;
   const warning =
     foreignKeyInPrimaryKey && ownsPrimaryKeyPart
       ? `${table.name} tiene una PK mixta de FK y columnas propias; podría ser una entidad ` +

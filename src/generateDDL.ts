@@ -1,5 +1,5 @@
-import type { HierarchyRecord } from "./domain/model/types";
-import { sameName } from "./domain/names";
+import type { AttributeMark, HierarchyRecord } from "./domain/model/types";
+import { normalizeName, sameName } from "./domain/names";
 import type { CheckConstraint, Column, ForeignKey, Table } from "./parser/ddlParser";
 
 const reservedWords = new Set(
@@ -35,8 +35,24 @@ function checkColumns(table: Table, check: CheckConstraint): string[] {
     .map((column) => column.name);
 }
 
-export function generateDDL(tables: Table[], hierarchies: HierarchyRecord[] = []): string {
-  return applyHierarchyRules(tables, hierarchies)
+export function buildLogicalTables(
+  tables: Table[],
+  hierarchies: HierarchyRecord[] = [],
+  attributeMarks: Record<string, AttributeMark> = {},
+): Table[] {
+  const expandedComposites = expandCompositeAttributes(tables, attributeMarks);
+  return expandMultivaluedAttributes(
+    applyHierarchyRules(expandedComposites, hierarchies),
+    attributeMarks,
+  );
+}
+
+export function generateDDL(
+  tables: Table[],
+  hierarchies: HierarchyRecord[] = [],
+  attributeMarks: Record<string, AttributeMark> = {},
+): string {
+  return buildLogicalTables(tables, hierarchies, attributeMarks)
     .map((table) => {
       const usedNames = new Set<string>();
       const parts = table.columns.map((column) => {
@@ -86,6 +102,180 @@ export function generateDDL(tables: Table[], hierarchies: HierarchyRecord[] = []
       return `CREATE TABLE ${quote(table.name)} (\n${parts.join(",\n")}\n);`;
     })
     .join("\n\n");
+}
+
+// Cada multivaluado se separa para conservar todos sus valores y la identidad de su entidad dueña.
+function expandMultivaluedAttributes(
+  tables: Table[],
+  attributeMarks: Record<string, AttributeMark>,
+): Table[] {
+  const usedTableNames = new Set(tables.map((table) => table.name.toLocaleLowerCase("es")));
+  const transformedTables = tables.map((table) => ({ ...table, columns: [...table.columns] }));
+  const generatedTables: Table[] = [];
+
+  for (const owner of transformedTables) {
+    const markedAttributes = owner.columns.flatMap((column) => {
+      const entry = Object.entries(attributeMarks).find(([key]) =>
+        sameName(key, `${owner.name}.${column.name}`),
+      );
+      if (!entry || !["multivalued", "multivalued-composite"].includes(entry[1].kind)) return [];
+      return [{ column, mark: entry[1] }];
+    });
+
+    for (const { column, mark } of markedAttributes) {
+      const keyColumns = owner.primaryKey
+        .map((name) => owner.columns.find((candidate) => sameName(candidate.name, name)))
+        .filter((candidate): candidate is Column => Boolean(candidate));
+      if (!keyColumns.length || keyColumns.length !== owner.primaryKey.length) continue;
+
+      const tableName = uniqueTableName(`${owner.name}_${column.name}`, usedTableNames);
+      const columnNames = new Set(keyColumns.map((key) => key.name.toLocaleLowerCase("es")));
+      const valueNames =
+        mark.kind === "multivalued-composite" && mark.parts.length ? mark.parts : [column.name];
+      const valueColumns = valueNames.map((name) => ({
+        name: uniqueGeneratedColumnName(name, columnNames),
+        type: column.type,
+        nullable: false,
+        primaryKey: true,
+        unique: false,
+      }));
+      const foreignColumns = keyColumns.map((key) => ({
+        name: key.name,
+        type: key.type,
+        nullable: false,
+        primaryKey: true,
+        unique: false,
+        foreignKey: {
+          table: owner.name,
+          columns: owner.primaryKey,
+          onDelete: "CASCADE" as const,
+        },
+      }));
+      const keyNames = keyColumns.map((key) => key.name);
+
+      owner.columns = owner.columns.filter((candidate) => candidate !== column);
+      generatedTables.push({
+        name: tableName,
+        columns: [...foreignColumns, ...valueColumns],
+        primaryKey: [...keyNames, ...valueColumns.map((value) => value.name)],
+        uniqueKeys: [],
+        foreignKeys: [
+          {
+            columns: keyNames,
+            table: owner.name,
+            targetColumns: keyNames,
+            onDelete: "CASCADE",
+          },
+        ],
+        checks: [],
+      });
+    }
+  }
+
+  return [...transformedTables, ...generatedTables];
+}
+
+// Cada atributo compuesto se convierte en una columna por miniatributo en el modelo lógico.
+function expandCompositeAttributes(
+  tables: Table[],
+  attributeMarks: Record<string, AttributeMark>,
+): Table[] {
+  const expansions = new Map<string, Map<string, string[]>>();
+
+  for (const table of tables) {
+    const compositeColumns = table.columns.flatMap((column) => {
+      const mark = findAttributeMark(attributeMarks, table.name, column.name);
+      if (mark?.kind !== "composite") return [];
+      const parts = mark.parts.map((part) => part.trim()).filter(Boolean);
+      return parts.length ? [{ column, parts }] : [];
+    });
+    const compositeNames = new Set(
+      compositeColumns.map(({ column }) => normalizeName(column.name)),
+    );
+    const usedNames = new Set(
+      table.columns
+        .filter((column) => !compositeNames.has(normalizeName(column.name)))
+        .map((column) => normalizeName(column.name)),
+    );
+    const tableExpansion = new Map<string, string[]>();
+
+    for (const { column, parts } of compositeColumns) {
+      tableExpansion.set(
+        normalizeName(column.name),
+        parts.map((part) => uniqueGeneratedColumnName(part, usedNames)),
+      );
+    }
+    expansions.set(normalizeName(table.name), tableExpansion);
+  }
+
+  return tables.map((table) => {
+    const sourceExpansion =
+      expansions.get(normalizeName(table.name)) ?? new Map<string, string[]>();
+    const columns = table.columns.flatMap((column) => {
+      const parts = sourceExpansion.get(normalizeName(column.name));
+      if (!parts) return [column];
+      return parts.map((name) => ({
+        ...column,
+        name,
+        unique: false,
+        alternateKey: false,
+        foreignKey: column.foreignKey
+          ? {
+              ...column.foreignKey,
+              columns: expandColumnNames(
+                column.foreignKey.columns ?? [column.name],
+                expansions.get(normalizeName(column.foreignKey.table)),
+              ),
+            }
+          : undefined,
+      }));
+    });
+    const primaryKey = expandColumnNames(table.primaryKey, sourceExpansion);
+    const uniqueKeys = table.uniqueKeys.map((key) => expandColumnNames(key, sourceExpansion));
+    const foreignKeys = table.foreignKeys.map((foreignKey) => ({
+      ...foreignKey,
+      columns: expandColumnNames(foreignKey.columns, sourceExpansion),
+      targetColumns: foreignKey.targetColumns
+        ? expandColumnNames(
+            foreignKey.targetColumns,
+            expansions.get(normalizeName(foreignKey.table)),
+          )
+        : undefined,
+    }));
+    return { ...table, columns, primaryKey, uniqueKeys, foreignKeys };
+  });
+}
+
+function findAttributeMark(
+  attributeMarks: Record<string, AttributeMark>,
+  tableName: string,
+  columnName: string,
+): AttributeMark | undefined {
+  const key = `${tableName}.${columnName}`;
+  return Object.entries(attributeMarks).find(([candidate]) => sameName(candidate, key))?.[1];
+}
+
+function expandColumnNames(
+  names: string[],
+  expansion: Map<string, string[]> | undefined,
+): string[] {
+  return names.flatMap((name) => expansion?.get(normalizeName(name)) ?? [name]);
+}
+
+function uniqueTableName(base: string, usedNames: Set<string>): string {
+  let candidate = base;
+  let suffix = 2;
+  while (usedNames.has(candidate.toLocaleLowerCase("es"))) candidate = `${base}_${suffix++}`;
+  usedNames.add(candidate.toLocaleLowerCase("es"));
+  return candidate;
+}
+
+function uniqueGeneratedColumnName(base: string, usedNames: Set<string>): string {
+  let candidate = base;
+  let suffix = 2;
+  while (usedNames.has(candidate.toLocaleLowerCase("es"))) candidate = `${base}_${suffix++}`;
+  usedNames.add(candidate.toLocaleLowerCase("es"));
+  return candidate;
 }
 
 function applyHierarchyRules(tables: Table[], hierarchies: HierarchyRecord[]): Table[] {

@@ -52,6 +52,43 @@
 .relation-preview-heading h4 {
   margin: 0;
 }
+.weak-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.weak-preview-heading h4 {
+  margin: 0;
+}
+.weak-preview-control {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #cbdde2;
+  border-radius: 5px;
+  background: #fff;
+  color: #36535f;
+  font:
+    600 11px "DM Sans",
+    sans-serif;
+}
+.weak-preview-parent,
+.weak-preview-cardinality {
+  padding: 5px;
+  text-align: center;
+}
+.weak-preview-relation-name {
+  padding: 3px;
+  border-color: transparent;
+  background: transparent;
+  text-align: center;
+}
+.weak-preview-relation-name:focus {
+  border-color: #8eabb5;
+  background: #fff;
+}
 .recursive-chip,
 .relation-kind-badge {
   padding: 5px 9px;

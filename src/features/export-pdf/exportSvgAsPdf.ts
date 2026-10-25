@@ -12,7 +12,14 @@ export async function exportSvgAsPdf(svg: SVGSVGElement, filename: string, state
     height: viewBoxValues[3] || 465,
   };
   let viewBox = fallbackViewBox;
+  const uiControls = Array.from(svg.querySelectorAll(".collapse")).map((control) => ({
+    control,
+    visibility: (control as SVGElement).style.visibility,
+  }));
   try {
+    uiControls.forEach(({ control }) => {
+      (control as SVGElement).style.visibility = "hidden";
+    });
     const bounds = svg.getBBox();
     if (bounds.width > 0 && bounds.height > 0) {
       const padding = 48;
@@ -25,21 +32,34 @@ export async function exportSvgAsPdf(svg: SVGSVGElement, filename: string, state
     }
   } catch {
     /* Usa el viewBox actual como respaldo. */
+  } finally {
+    uiControls.forEach(({ control, visibility }) => {
+      (control as SVGElement).style.visibility = visibility;
+    });
   }
-  const ratio = viewBox.width / Math.max(viewBox.height, 1);
+  const outputScale = Math.min(2, 2800 / Math.max(viewBox.width, viewBox.height, 1));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(Math.min(2800, Math.max(1200, 2000 * ratio)));
-  canvas.height = Math.round(Math.min(2400, Math.max(900, canvas.width / Math.max(ratio, 0.1))));
+  canvas.width = Math.max(1, Math.ceil(viewBox.width * outputScale));
+  canvas.height = Math.max(1, Math.ceil(viewBox.height * outputScale));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("El navegador no pudo generar la imagen del PDF.");
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  const scaleX = canvas.width / Math.max(viewBox.width, 1),
-    scaleY = canvas.height / Math.max(viewBox.height, 1);
-  context.setTransform(scaleX, 0, 0, scaleY, -viewBox.x * scaleX, -viewBox.y * scaleY);
+  context.setTransform(
+    outputScale,
+    0,
+    0,
+    outputScale,
+    -viewBox.x * outputScale,
+    -viewBox.y * outputScale,
+  );
   const drawNode = (node: Element) => {
     const tag = node.localName;
-    if (["defs", "title", "desc", "style", "marker"].includes(tag)) return;
+    if (
+      ["defs", "title", "desc", "style", "marker"].includes(tag) ||
+      node.classList.contains("collapse")
+    )
+      return;
     const style = getComputedStyle(node);
     if (style.display === "none" || style.visibility === "hidden") return;
     context.save();
@@ -76,9 +96,25 @@ export async function exportSvgAsPdf(svg: SVGSVGElement, filename: string, state
       context.moveTo(x1, y1);
       context.lineTo(x2, y2);
       context.stroke();
-      if (style.markerEnd !== "none") {
-        const angle = Math.atan2(y2 - y1, x2 - x1),
-          size = 8;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      if (style.markerEnd !== "none" && style.markerEnd.includes("multi-arrow")) {
+        const length = 8,
+          halfWidth = 4;
+        const backward = angle + Math.PI;
+        const baseX = x2 + Math.cos(backward) * length,
+          baseY = y2 + Math.sin(backward) * length;
+        const perpendicularX = Math.cos(backward + Math.PI / 2) * halfWidth,
+          perpendicularY = Math.sin(backward + Math.PI / 2) * halfWidth;
+        context.beginPath();
+        context.moveTo(baseX + perpendicularX, baseY + perpendicularY);
+        context.lineTo(x2, y2);
+        context.moveTo(baseX, baseY);
+        context.lineTo(x2, y2);
+        context.moveTo(baseX - perpendicularX, baseY - perpendicularY);
+        context.lineTo(x2, y2);
+        context.stroke();
+      } else if (style.markerEnd !== "none") {
+        const size = 8;
         context.beginPath();
         context.moveTo(x2, y2);
         context.lineTo(x2 - size * Math.cos(angle - 0.45), y2 - size * Math.sin(angle - 0.45));

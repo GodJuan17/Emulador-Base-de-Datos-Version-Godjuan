@@ -3,6 +3,7 @@ import type { AttributeMark, Entity } from "../../../model";
 
 type Props = {
   entity: Entity;
+  subtype: boolean;
   collapsed: boolean;
   attributeMarks: Record<string, AttributeMark>;
   domains: Record<string, string>;
@@ -21,6 +22,7 @@ type Props = {
 
 export function ConceptualEntityNode({
   entity,
+  subtype,
   collapsed,
   attributeMarks,
   domains,
@@ -33,9 +35,43 @@ export function ConceptualEntityNode({
   positionAttribute,
 }: Props) {
   const attributes = entity.table.columns.filter(
-    (column) => column.primaryKey || !column.foreignKey,
+    (column) =>
+      (column.primaryKey || !column.foreignKey) &&
+      column.foreignKey?.dependency !== "ID" &&
+      !(subtype && column.primaryKey),
   );
   const shownAttributes = collapsed ? attributes.slice(0, 1) : attributes;
+  const identifyingForeignKey = entity.table.foreignKeys.find(
+    (foreignKey) => foreignKey.dependency === "ID",
+  );
+  const recordedDiscriminants = identifyingForeignKey
+    ? (identifyingForeignKey.partialIdentifiers ??
+      (identifyingForeignKey.partialIdentifier
+        ? [identifyingForeignKey.partialIdentifier]
+        : entity.table.primaryKey.filter(
+            (name) =>
+              !identifyingForeignKey.columns.some(
+                (column) => column.toLocaleLowerCase() === name.toLocaleLowerCase(),
+              ),
+          )))
+    : [];
+  const discriminants = identifyingForeignKey?.weakCardinality?.endsWith(":1")
+    ? []
+    : recordedDiscriminants;
+  const compositeIdentifier = Boolean(identifyingForeignKey);
+  const layoutCount = shownAttributes.length + (compositeIdentifier ? 1 : 0);
+  const compositeIdentifierPoint = compositeIdentifier
+    ? positionAttribute(entity, 0, layoutCount)
+    : null;
+  const visibleDiscriminants = shownAttributes
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) =>
+      discriminants.some((name) => name.toLocaleLowerCase() === column.name.toLocaleLowerCase()),
+    )
+    .map(({ column, index }) => ({
+      name: column.name,
+      ...positionAttribute(entity, index + 1, layoutCount),
+    }));
 
   return (
     <g
@@ -69,8 +105,55 @@ export function ConceptualEntityNode({
       >
         {entity.table.name.toLocaleUpperCase("es")}
       </text>
+      {compositeIdentifierPoint && (
+        <g className="composite-identifier">
+          {(() => {
+            const angle = Math.atan2(
+              compositeIdentifierPoint.y - entity.y,
+              compositeIdentifierPoint.x - entity.x,
+            );
+            return (
+              <line
+                x1={entity.x + Math.cos(angle) * 79}
+                y1={entity.y + Math.sin(angle) * 29}
+                x2={compositeIdentifierPoint.x}
+                y2={compositeIdentifierPoint.y}
+                className="edge"
+              />
+            );
+          })()}
+          {visibleDiscriminants.map((discriminant) => (
+            <line
+              key={`identifier-part:${discriminant.name}`}
+              x1={compositeIdentifierPoint.x}
+              y1={compositeIdentifierPoint.y}
+              x2={discriminant.x}
+              y2={discriminant.y}
+              className="identifying-attribute-edge"
+            />
+          ))}
+          <circle
+            cx={compositeIdentifierPoint.x}
+            cy={compositeIdentifierPoint.y}
+            r="5"
+            className="key-attribute"
+          />
+          <text
+            x={compositeIdentifierPoint.x}
+            y={compositeIdentifierPoint.y - 12}
+            textAnchor="middle"
+            className="attribute-label"
+          >
+            {`id_${entity.table.name}`.slice(0, 18)}
+          </text>
+        </g>
+      )}
       {shownAttributes.map((column, index) => {
-        const { x, y, angle } = positionAttribute(entity, index, shownAttributes.length);
+        const { x, y, angle } = positionAttribute(
+          entity,
+          index + (compositeIdentifier ? 1 : 0),
+          layoutCount,
+        );
         const key = `${entity.table.name}.${column.name}`;
         const mark = attributeMarks[key];
         const composite = mark?.kind === "composite" || mark?.kind === "multivalued-composite";
@@ -84,6 +167,9 @@ export function ConceptualEntityNode({
               ? "end"
               : "middle";
         const domain = domains[key];
+        const isDiscriminant = discriminants.some(
+          (name) => name.toLocaleLowerCase() === column.name.toLocaleLowerCase(),
+        );
         const stemX = entity.x + Math.cos(angle) * 79;
         const stemY = entity.y + Math.sin(angle) * 29;
         const edgeClass =
@@ -115,7 +201,7 @@ export function ConceptualEntityNode({
               cx={x}
               cy={y}
               r="4"
-              className={column.primaryKey ? "key-attribute" : "attribute"}
+              className={column.primaryKey && !isDiscriminant ? "key-attribute" : "attribute"}
             />
             {column.alternateKey && (
               <>
@@ -151,14 +237,14 @@ export function ConceptualEntityNode({
             {composite &&
               mark.parts.map((part, childIndex) => {
                 const childX = x + (childIndex - (mark.parts.length - 1) / 2) * 32;
-                const childY = y + 63;
+                const childY = y + 70;
                 return (
                   <g key={`${part}-${childIndex}`}>
-                    <line x1={x} y1={y + 6} x2={childX} y2={childY - 12} className="edge" />
-                    <circle cx={childX} cy={childY} r="10" className="attribute" />
+                    <line x1={x} y1={y + 6} x2={childX} y2={childY - 6} className="edge" />
+                    <circle cx={childX} cy={childY} r="6" className="attribute" />
                     <text
                       x={childX}
-                      y={childY - 19}
+                      y={childY + 18}
                       textAnchor="middle"
                       className="component-label"
                     >

@@ -23,7 +23,6 @@ const fixtures: Fixture[] = [
     relationCount: 2,
     logicalRelationCount: 3,
     associativeTables: ["PeliculaActor"],
-    weakRelationshipDependencies: ["E"],
   },
   {
     name: "biblioteca",
@@ -31,7 +30,6 @@ const fixtures: Fixture[] = [
     tables: ["Libro", "Socio", "Prestamo"],
     relationCount: 2,
     logicalRelationCount: 2,
-    weakRelationshipDependencies: ["E", "E"],
   },
   {
     name: "universidad",
@@ -47,7 +45,6 @@ const fixtures: Fixture[] = [
     tables: ["Empleado", "Familiar"],
     relationCount: 1,
     logicalRelationCount: 1,
-    weakRelationshipDependencies: ["ID"],
   },
   {
     name: "relación recursiva",

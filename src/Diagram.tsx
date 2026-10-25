@@ -10,7 +10,12 @@ import type {
 import { sameName } from "./domain/names";
 import type { Column, WeakCardinality } from "./parser/ddlParser";
 import type { CanvasPositions, CanvasView } from "./state/appState";
-import { point, attributePosition, attributePoint } from "./features/conceptual-diagram/geometry";
+import {
+  point,
+  attributePosition,
+  attributePoint,
+  identifyingIdentifierPoint,
+} from "./features/conceptual-diagram/geometry";
 import { orthogonalAttributeRoute } from "./features/conceptual-diagram/attributeRouting";
 import { calculateLayout } from "./features/conceptual-diagram/layout";
 import { exportSvgAsPdf } from "./features/export-pdf/exportSvgAsPdf";
@@ -55,6 +60,8 @@ export type DiagramProps = {
   setHierarchies: Dispatch<SetStateAction<Hierarchy[]>>;
   positions: CanvasPositions;
   setPositions: Dispatch<SetStateAction<CanvasPositions>>;
+  logicalPositions: CanvasPositions;
+  setLogicalPositions: Dispatch<SetStateAction<CanvasPositions>>;
   view: CanvasView;
   setView: Dispatch<SetStateAction<CanvasView>>;
   collapsed: Record<string, boolean>;
@@ -92,6 +99,8 @@ export function Diagram({
   setHierarchies,
   positions,
   setPositions,
+  logicalPositions,
+  setLogicalPositions,
   view,
   setView,
   collapsed,
@@ -126,6 +135,8 @@ export function Diagram({
     setHierarchies,
     positions,
     setPositions,
+    logicalPositions,
+    setLogicalPositions,
     view,
     setView,
     collapsed,
@@ -168,10 +179,24 @@ export function Diagram({
     () => model.entities.map((e) => ({ ...e, ...(positions[e.table.name] ?? {}) })),
     [model.entities, positions],
   );
+  const logicalEntities = useMemo(
+    () =>
+      model.logicalEntities.map((entity) => ({
+        ...entity,
+        ...(logicalPositions[entity.table.name] ?? {}),
+      })),
+    [model.logicalEntities, logicalPositions],
+  );
   useEffect(() => {
     if (!entityRenameRequest) return;
     const { oldName, newName } = entityRenameRequest;
     setPositions((current) => {
+      const next = { ...current };
+      if (next[oldName]) next[newName] = next[oldName];
+      delete next[oldName];
+      return next;
+    });
+    setLogicalPositions((current) => {
       const next = { ...current };
       if (next[oldName]) next[newName] = next[oldName];
       delete next[oldName];
@@ -194,17 +219,24 @@ export function Diagram({
         ...current,
         [first.table.name]: { x: view.x + view.width / 2, y: view.y + view.height / 2 },
       }));
+      setLogicalPositions((current) => ({
+        ...current,
+        [first.table.name]: { x: view.x + view.width / 2, y: view.y + view.height / 2 },
+      }));
     }
-  }, [model.entities, setPositions, view]);
+  }, [model.entities, setPositions, setLogicalPositions, view]);
   useEffect(() => {
     if (arrangeRequest <= lastArrangeRequest.current) return;
     lastArrangeRequest.current = arrangeRequest;
-    const layout = calculateLayout(
-      entities.filter((entity) => !entity.associative),
-      model.relations,
-      hierarchies,
-    );
-    setPositions((current) => ({ ...current, ...layout.positions }));
+    const layout = conceptual
+      ? calculateLayout(
+          entities.filter((entity) => !entity.associative),
+          model.relations,
+          hierarchies,
+        )
+      : calculateLayout(logicalEntities, model.logicalRelations, hierarchies);
+    const updatePositions = conceptual ? setPositions : setLogicalPositions;
+    updatePositions((current) => ({ ...current, ...layout.positions }));
     setView(layout.view);
   }, [arrangeRequest]);
   useEffect(() => {
@@ -322,7 +354,7 @@ export function Diagram({
       setPan,
       view,
       setView,
-      setPositions,
+      setPositions: conceptual ? setPositions : setLogicalPositions,
       setRelationDraft,
     });
   const availableEntities = entities
@@ -390,6 +422,12 @@ export function Diagram({
     if (!selectedEntity || !renameEntity(selectedEntity, entityNameDraft)) return;
     const next = entityNameDraft.trim();
     setPositions((current) => {
+      const positions = { ...current };
+      if (positions[selectedEntity]) positions[next] = positions[selectedEntity];
+      delete positions[selectedEntity];
+      return positions;
+    });
+    setLogicalPositions((current) => {
       const positions = { ...current };
       if (positions[selectedEntity]) positions[next] = positions[selectedEntity];
       delete positions[selectedEntity];
@@ -486,13 +524,14 @@ export function Diagram({
           </marker>
           <marker
             id="multi-arrow"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
+            markerWidth="10"
+            markerHeight="10"
+            viewBox="0 0 8 8"
+            refX="8"
             refY="4"
             orient="auto-start-reverse"
           >
-            <path d="M0 0L8 4L0 8z" fill="#7e929d" />
+            <path d="M0 0L8 4M0 4L8 4M0 8L8 4" fill="none" stroke="#7e929d" strokeWidth="1.2" />
           </marker>
         </defs>
         {conceptual &&
@@ -502,32 +541,38 @@ export function Diagram({
               .flatMap((fk) => {
                 const parent = getEntity(fk.table, entities);
                 if (!parent) return [];
-                return fk.columns.map((childKey, index) => {
-                  const parentKey = fk.targetColumns?.[index] ?? parent.table.primaryKey[index];
-                  const from = attributePoint(
-                    parent,
-                    parentKey,
-                    Boolean(collapsed[parent.table.name]),
-                    attributeAvoidAngles(parent),
-                  );
-                  const to = attributePoint(
-                    child,
-                    childKey,
-                    Boolean(collapsed[child.table.name]),
-                    attributeAvoidAngles(child),
-                  );
-                  return from && to ? (
-                    <path
-                      key={`identifying:${parent.table.name}:${child.table.name}:${index}`}
-                      d={orthogonalAttributeRoute(
-                        { x: from.x, y: from.y + 7 },
-                        { x: to.x, y: to.y + 7 },
-                        entities,
-                      )}
-                      className="identifying-attribute-edge"
-                    />
-                  ) : null;
-                });
+                const parentIdentification = parent.table.foreignKeys.some(
+                  (foreignKey) => foreignKey.dependency === "ID",
+                );
+                const parentKey = fk.targetColumns?.[0] ?? parent.table.primaryKey[0];
+                const from = parentIdentification
+                  ? identifyingIdentifierPoint(
+                      parent,
+                      Boolean(collapsed[parent.table.name]),
+                      attributeAvoidAngles(parent),
+                    )
+                  : attributePoint(
+                      parent,
+                      parentKey,
+                      Boolean(collapsed[parent.table.name]),
+                      attributeAvoidAngles(parent),
+                    );
+                const to = identifyingIdentifierPoint(
+                  child,
+                  Boolean(collapsed[child.table.name]),
+                  attributeAvoidAngles(child),
+                );
+                return from && to ? (
+                  <path
+                    key={`identifying:${parent.table.name}:${child.table.name}`}
+                    d={orthogonalAttributeRoute(
+                      { x: from.x, y: from.y + 7 },
+                      { x: to.x, y: to.y + 7 },
+                      entities,
+                    )}
+                    className="identifying-attribute-edge"
+                  />
+                ) : null;
               }),
           )}
         {relationStart &&
@@ -586,6 +631,9 @@ export function Diagram({
                 <ConceptualEntityNode
                   key={entity.table.name}
                   entity={entity}
+                  subtype={hierarchies.some((hierarchy) =>
+                    hierarchy.subtypes.some((name) => sameName(name, entity.table.name)),
+                  )}
                   collapsed={Boolean(collapsed[entity.table.name])}
                   attributeMarks={attributeMarks}
                   domains={domains}
@@ -618,8 +666,8 @@ export function Diagram({
           <>
             {hierarchies.flatMap((hierarchy) =>
               hierarchy.subtypes.map((subtypeName) => {
-                const parent = getEntity(hierarchy.supertype, entities);
-                const child = getEntity(subtypeName, entities);
+                const parent = getEntity(hierarchy.supertype, logicalEntities);
+                const child = getEntity(subtypeName, logicalEntities);
                 if (!parent || !child) return null;
                 const dx = child.x - parent.x;
                 const dy = child.y - parent.y;
@@ -655,8 +703,8 @@ export function Diagram({
               }),
             )}
             {model.logicalRelations.map((r) => {
-              const a = point(getEntity(r.left, entities), 0);
-              const b = point(getEntity(r.right, entities), 1);
+              const a = point(getEntity(r.left, logicalEntities), 0);
+              const b = point(getEntity(r.right, logicalEntities), 1);
               const self = sameName(r.left, r.right);
               const hierarchyLink = hierarchies.some(
                 (h) =>
@@ -712,13 +760,14 @@ export function Diagram({
                 </g>
               );
             })}
-            {entities.map((e) => {
+            {logicalEntities.map((e) => {
               const { table } = e;
               const inheritedFrom = hierarchies.find((h) =>
                 h.subtypes.some((name) => sameName(name, table.name)),
               )?.supertype;
               const parentTable = inheritedFrom
-                ? entities.find((entity) => sameName(entity.table.name, inheritedFrom))?.table
+                ? logicalEntities.find((entity) => sameName(entity.table.name, inheritedFrom))
+                    ?.table
                 : undefined;
               const parentForeignKey = inheritedFrom
                 ? table.foreignKeys.find((fk) => sameName(fk.table, inheritedFrom))
@@ -732,7 +781,8 @@ export function Diagram({
                       const localName = parentForeignKey?.columns[index] ?? parentKey;
                       return {
                         key: `__hierarchy_${inheritedFrom}_${parentKey}`,
-                        label: `PK/FK ${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
+                        markers: "PK FK",
+                        name: `${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
                       };
                     })
                   : [];
@@ -742,14 +792,23 @@ export function Diagram({
                     !inheritedColumns.has(column.name.toLowerCase()) &&
                     (!inheritedFrom || !column.primaryKey),
                 )
-                .map((column) => ({
-                  key: column.name,
-                  label: [
-                    column.primaryKey ? "PK " : "",
-                    column.name,
-                    column.foreignKey ? " FK" : "",
-                  ].join(""),
-                }));
+                .map((column) => {
+                  const isUnique =
+                    column.unique ||
+                    column.alternateKey ||
+                    table.uniqueKeys.some((key) => key.some((name) => sameName(name, column.name)));
+                  return {
+                    key: column.name,
+                    markers: [
+                      column.primaryKey ? "PK" : "",
+                      column.foreignKey ? "FK" : "",
+                      isUnique && !column.primaryKey ? "UK" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                    name: column.name,
+                  };
+                });
               const logicalRows = [...inheritedRows, ...ownRows];
               const h = 40 + logicalRows.length * 25;
               return (
@@ -770,18 +829,24 @@ export function Diagram({
                     d={`M${e.x - 105} ${e.y - h / 2 + 39}H${e.x + 105}`}
                     className="table-divider"
                   />
+                  {logicalRows.length > 0 && (
+                    <path
+                      d={`M${e.x - 64} ${e.y - h / 2 + 43}V${e.y + h / 2 - 5}`}
+                      className="table-key-separator"
+                    />
+                  )}
                   <text x={e.x} y={e.y - h / 2 + 26} textAnchor="middle" className="table-title">
                     {table.name.toLocaleUpperCase("es")}
                   </text>
                   {logicalRows.map((row, i) => (
-                    <text
-                      key={row.key}
-                      x={e.x - 92}
-                      y={e.y - h / 2 + 59 + i * 25}
-                      className="table-column"
-                    >
-                      {row.label}
-                    </text>
+                    <g key={row.key}>
+                      <text x={e.x - 98} y={e.y - h / 2 + 59 + i * 25} className="table-key-mark">
+                        {row.markers}
+                      </text>
+                      <text x={e.x - 56} y={e.y - h / 2 + 59 + i * 25} className="table-column">
+                        {row.name}
+                      </text>
+                    </g>
                   ))}
                 </g>
               );

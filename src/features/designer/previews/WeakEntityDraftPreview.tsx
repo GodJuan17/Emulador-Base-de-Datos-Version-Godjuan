@@ -8,6 +8,12 @@ export function WeakEntityDraftPreview({
   cardinality,
   identifier,
   attributes,
+  discriminants,
+  parents,
+  onParentChange,
+  onRelationNameChange,
+  onDependencyChange,
+  onCardinalityChange,
 }: {
   parent: string;
   name: string;
@@ -16,13 +22,33 @@ export function WeakEntityDraftPreview({
   cardinality: WeakCardinality;
   identifier: string;
   attributes: string[];
+  discriminants: string[];
+  parents: string[];
+  onParentChange: (parent: string) => void;
+  onRelationNameChange: (name: string) => void;
+  onDependencyChange: (dependency: DependencyMark) => void;
+  onCardinalityChange: (cardinality: WeakCardinality) => void;
 }) {
   return (
     <section className="entity-live-preview relationship-preview">
-      <h4>Vista previa</h4>
+      <header className="weak-preview-heading">
+        <h4>Vista previa</h4>
+        <div className="relation-mode-switch" role="group" aria-label="Tipo de identificación">
+          {(["E", "ID"] as const).map((value) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={dependency === value}
+              onClick={() => onDependencyChange(value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      </header>
       <svg
         viewBox="0 0 800 460"
-        role="img"
+        role="group"
         aria-label="Vista previa de entidad débil y su relación"
       >
         <line x1="230" y1="220" x2="330" y2="220" className="draft-preview-edge" />
@@ -37,15 +63,21 @@ export function WeakEntityDraftPreview({
           rx="3"
           className="draft-preview-entity-emphasis"
         />
-        <text
-          x="170"
-          y="222"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="draft-preview-label"
-        >
-          {parent || "Entidad fuerte"}
-        </text>
+        <foreignObject x="115" y="198" width="110" height="44">
+          <select
+            className="weak-preview-control weak-preview-parent"
+            aria-label="Clase padre"
+            value={parent}
+            onChange={(event) => onParentChange(event.target.value)}
+          >
+            <option value="">Clase padre</option>
+            {parents.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </foreignObject>
         <text
           x="630"
           y="222"
@@ -60,31 +92,67 @@ export function WeakEntityDraftPreview({
         <text x="400" y="178" textAnchor="middle" className="draft-preview-label">
           {dependency === "ID" ? "ID" : "EX"}
         </text>
-        <text x="400" y="226" textAnchor="middle" className="draft-preview-label">
-          {relationName || "Relación"}
-        </text>
+        <foreignObject x="350" y="202" width="100" height="36">
+          <input
+            className="weak-preview-control weak-preview-relation-name"
+            aria-label="Nombre de la relación"
+            value={relationName}
+            onChange={(event) => onRelationNameChange(event.target.value)}
+            placeholder="pertenece"
+          />
+        </foreignObject>
         <text x="400" y="132" textAnchor="middle" className="draft-preview-label">
           1:N
         </text>
         <text x="278" y="207" textAnchor="middle" className="draft-preview-label">
           (1,1)
         </text>
-        <text x="522" y="207" textAnchor="middle" className="draft-preview-label">
-          ({cardinality.replace(":", ",").toLowerCase()})
-        </text>
+        <foreignObject x="485" y="197" width="75" height="42">
+          <select
+            className="weak-preview-control weak-preview-cardinality"
+            aria-label="Cardinalidad de la entidad débil"
+            value={cardinality}
+            onChange={(event) => onCardinalityChange(event.target.value as WeakCardinality)}
+          >
+            {(["0:N", "1:N", "0:1", "1:1"] as const).map((value) => (
+              <option key={value} value={value}>
+                ({value.replace(":", ",").toUpperCase()})
+              </option>
+            ))}
+          </select>
+        </foreignObject>
         <circle cx="630" cy="278" r="6" className="draft-preview-node primary" />
         <text x="630" y="305" textAnchor="middle" className="draft-preview-label">
-          {dependency === "E" ? identifier : "PK heredada"}
+          {identifier ||
+            (dependency === "E"
+              ? "id"
+              : cardinality.endsWith(":1")
+                ? "PK heredada"
+                : "Discriminante")}
         </text>
-        {attributes.slice(0, 3).map((attribute, index) => (
-          <g key={attribute + index}>
-            <line x1="630" y1="250" x2={545 + index * 85} y2="348" className="draft-preview-edge" />
-            <circle cx={545 + index * 85} cy="365" r="24" className="draft-preview-node" />
-            <text x={545 + index * 85} y="401" textAnchor="middle" className="draft-preview-label">
-              {attribute.slice(0, 12)}
-            </text>
-          </g>
-        ))}
+        {attributes.slice(0, 3).map((attribute, index) => {
+          const x = 545 + index * 85;
+          const discriminant = discriminants.some(
+            (item) => item.toLocaleLowerCase() === attribute.toLocaleLowerCase(),
+          );
+          return (
+            <g key={attribute + index}>
+              <line x1="630" y1="250" x2={x} y2="348" className="draft-preview-edge" />
+              {dependency === "ID" && discriminant && (
+                <line x1="630" y1="284" x2={x} y2="359" className="identifying-attribute-edge" />
+              )}
+              <circle
+                cx={x}
+                cy="365"
+                r="24"
+                className={discriminant ? "draft-preview-node primary" : "draft-preview-node"}
+              />
+              <text x={x} y="401" textAnchor="middle" className="draft-preview-label">
+                {attribute.slice(0, 12)}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </section>
   );

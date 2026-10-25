@@ -90,6 +90,10 @@ export function HierarchyEditDialog({
               )
             }
           />
+          <p className="hierarchy-key-warning" role="note">
+            La PK propia de cada subtipo se sustituye por la PK heredada del supertipo en el modelo
+            lógico.
+          </p>
           <button
             type="button"
             className="inspector-danger"

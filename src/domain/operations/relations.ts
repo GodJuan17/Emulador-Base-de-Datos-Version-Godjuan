@@ -60,7 +60,8 @@ function createManyToManyRelation(
   source: Table,
   target: Table,
 ): Result<RelationState> {
-  const relationName = draft.name.trim() || `${source.name}_${target.name}`;
+  const relationName =
+    draft.associativeTableName?.trim() || draft.name.trim() || `${source.name}_${target.name}`;
   if (!isUniqueTableName(state.tables, relationName)) {
     return failure("duplicate-relation-name", `Ya existe una tabla llamada ${relationName}.`);
   }
@@ -166,6 +167,7 @@ function buildAssociativeTable(
 ): Result<Table> {
   let columns: Column[] = [];
   const foreignKeys: ForeignKey[] = [];
+  const participantColumns: string[][] = [];
   for (const participant of participants) {
     const addition = createForeignKeyColumns(
       { ...participant, name, columns },
@@ -178,7 +180,9 @@ function buildAssociativeTable(
       ...addition.columns.map((column) => ({ ...column, primaryKey: true, nullable: false })),
     ];
     foreignKeys.push(addition.foreignKey);
+    participantColumns.push(addition.foreignKey.columns);
   }
+  applyRelationshipMetadata(foreignKeys, draft);
   const extra = createRelationAttributes(draft.attributes ?? []);
   if (hasDuplicateNames([...columns, ...extra].map((column) => column.name))) {
     return failure(
@@ -186,14 +190,32 @@ function buildAssociativeTable(
       "Los atributos de la relación repiten nombres de columnas.",
     );
   }
-  return success(
-    createTable(
-      name,
-      [...columns, ...extra],
-      columns.map((column) => column.name),
-      foreignKeys,
-    ),
+  const maximums = draft.participantMaximums ?? participants.map(() => "n" as const);
+  const candidateKeys = maximums.flatMap((maximum, index) =>
+    maximum === "1"
+      ? [participantColumns.filter((_, participantIndex) => participantIndex !== index).flat()]
+      : [],
   );
+  if (!candidateKeys.length) candidateKeys.push(participantColumns.flat());
+  const uniqueCandidateKeys = candidateKeys.filter(
+    (candidate, index) =>
+      candidate.length > 0 &&
+      !candidateKeys
+        .slice(0, index)
+        .some(
+          (previous) =>
+            previous.length === candidate.length &&
+            previous.every((column) => candidate.some((item) => sameName(item, column))),
+        ),
+  );
+  const primaryKey = uniqueCandidateKeys[0] ?? participantColumns.flat();
+  const table = createTable(name, [...columns, ...extra], primaryKey, foreignKeys);
+  table.uniqueKeys = uniqueCandidateKeys.slice(1);
+  table.columns = table.columns.map((column) => ({
+    ...column,
+    primaryKey: primaryKey.some((name) => sameName(name, column.name)),
+  }));
+  return success(table);
 }
 
 function addAssociation(
@@ -254,6 +276,7 @@ function uniqueColumnName(columns: Column[], base: string): string {
 
 function applyRelationshipMetadata(foreignKeys: ForeignKey[], draft: RelationDraft): void {
   for (const foreignKey of foreignKeys) {
+    if (draft.name.trim()) foreignKey.relationName = draft.name.trim();
     if (draft.roles) foreignKey.roles = draft.roles;
     if (draft.participantMaximums) foreignKey.participantMaximums = draft.participantMaximums;
   }

@@ -100,27 +100,21 @@ function editWeakCardinality(
   cardinality: WeakCardinality,
 ): Result<OperationChanges> {
   const identifying = foreignKey.dependency === "ID";
-  const columns = owner.columns
-    .filter(
-      (column) =>
-        !(
-          identifying &&
-          foreignKey.partialIdentifier &&
-          sameName(column.name, foreignKey.partialIdentifier)
-        ),
-    )
-    .map((column) =>
-      foreignKey.columns.some((name) => sameName(name, column.name))
-        ? { ...column, nullable: false, primaryKey: identifying }
+  const partialIdentifiers =
+    foreignKey.partialIdentifiers ??
+    (foreignKey.partialIdentifier ? [foreignKey.partialIdentifier] : []);
+  const columns = owner.columns.map((column) =>
+    foreignKey.columns.some((name) => sameName(name, column.name))
+      ? { ...column, nullable: false, primaryKey: identifying }
+      : partialIdentifiers.some((name) => sameName(name, column.name))
+        ? { ...column, primaryKey: identifying && !cardinality.endsWith(":1") }
         : column,
-    );
+  );
   const uniqueKeys = owner.uniqueKeys.filter((item) => foreignKeyColumnsKey(item) !== key);
   if (!identifying && cardinality.endsWith(":1")) uniqueKeys.push(foreignKey.columns);
   const foreignKeys = owner.foreignKeys.map((item) => {
     if (item !== foreignKey) return item;
-    const next = { ...item, weakCardinality: cardinality };
-    delete next.partialIdentifier;
-    return next;
+    return { ...item, weakCardinality: cardinality };
   });
   return success({
     tables: replaceTable(state.tables, owner.name, {
@@ -144,22 +138,13 @@ function editBinaryCardinality(
   const uniqueKeys = owner.uniqueKeys.filter((item) => foreignKeyColumnsKey(item) !== key);
   const nextKind = changes.kind ?? currentKind;
   if (nextKind === "1:1") uniqueKeys.push(foreignKey.columns);
-  const dependency =
-    changes.mandatory === undefined ? foreignKey.dependency : changes.mandatory ? "E" : undefined;
   const columns = owner.columns.map((column) =>
     foreignKey.columns.some((name) => sameName(name, column.name))
-      ? {
-          ...column,
-          ...(changes.mandatory !== undefined ? { nullable: !changes.mandatory } : {}),
-          ...(column.foreignKey ? { foreignKey: { ...column.foreignKey, dependency } } : {}),
-        }
+      ? { ...column, ...(changes.mandatory !== undefined ? { nullable: !changes.mandatory } : {}) }
       : column,
   );
-  const foreignKeys = owner.foreignKeys.map((item) =>
-    item === foreignKey ? { ...item, dependency } : item,
-  );
   return success({
-    tables: replaceTable(state.tables, owner.name, { ...owner, columns, uniqueKeys, foreignKeys }),
+    tables: replaceTable(state.tables, owner.name, { ...owner, columns, uniqueKeys }),
   });
 }
 

@@ -5,6 +5,18 @@ export function point(entity: Entity | undefined, fallback: number) {
   return entity ? { x: entity.x, y: entity.y } : { x: 140 + fallback * 300, y: 620 };
 }
 
+export function identifyingIdentifierPoint(
+  entity: Entity,
+  collapsed = false,
+  avoidAngles: number[] = [],
+) {
+  const attributes = entity.table.columns.filter(
+    (column) => (column.primaryKey || !column.foreignKey) && column.foreignKey?.dependency !== "ID",
+  );
+  const shown = collapsed ? attributes.slice(0, 1) : attributes;
+  return attributePosition(entity, 0, shown.length + 1, avoidAngles);
+}
+
 export function entityEdge(entity: { x: number; y: number }, toward: { x: number; y: number }) {
   const dx = toward.x - entity.x,
     dy = toward.y - entity.y;
@@ -65,7 +77,7 @@ export function attributePoint(
   avoidAngles: number[] = [],
 ) {
   const attributes = entity.table.columns.filter(
-    (column) => column.primaryKey || !column.foreignKey,
+    (column) => (column.primaryKey || !column.foreignKey) && column.foreignKey?.dependency !== "ID",
   );
   const shown = collapsed ? attributes.slice(0, 1) : attributes;
   const index = shown.findIndex((column) => sameName(column.name, name));

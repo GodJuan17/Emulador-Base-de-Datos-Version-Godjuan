@@ -28,7 +28,13 @@ type StoredHistory = { version: 2; value: Omit<HistoryState, "lastGroupId"> };
 export function loadHistoryState(storage: StorageReader): HistoryState {
   const stored = readVersioned<StoredHistory>(storage, APP_STATE_KEY);
   if (stored?.version === 2 && isHistoryValue(stored.value)) {
-    return { ...stored.value, lastGroupId: null };
+    return {
+      ...stored.value,
+      present: hydrateAppState(stored.value.present),
+      past: stored.value.past.map(hydrateAppState),
+      future: stored.value.future.map(hydrateAppState),
+      lastGroupId: null,
+    };
   }
   return createHistoryState(migrateLegacyState(storage));
 }
@@ -43,6 +49,7 @@ export function saveHistoryState(storage: StorageWriter, state: HistoryState): v
 }
 
 function migrateLegacyState(storage: StorageReader): AppState {
+  const positions = readLegacy(storage, "sima.modelador.positions.v1", {});
   return {
     ...INITIAL_APP_STATE,
     exerciseStatement: readLegacy(storage, "sima.modelador.exercise-statement.v1", ""),
@@ -53,7 +60,8 @@ function migrateLegacyState(storage: StorageReader): AppState {
     attributeMarks: readLegacy(storage, "sima.modelador.attribute-marks.v1", {}),
     domains: readLegacy(storage, "sima.modelador.domains.v1", {}),
     relationAttributes: readLegacy(storage, "sima.modelador.relation-attributes.v1", {}),
-    positions: readLegacy(storage, "sima.modelador.positions.v1", {}),
+    positions,
+    logicalPositions: positions,
     view: readLegacy(storage, "sima.modelador.canvas-view.v1", INITIAL_VIEW),
     collapsed: readLegacy(storage, "sima.modelador.collapsed.v1", {}),
     hierarchies: readLegacy(storage, "sima.modelador.hierarchies.v1", []),
@@ -100,11 +108,19 @@ function isAppState(value: unknown): value is AppState {
     isObject(value.domains) &&
     isObject(value.relationAttributes) &&
     isObject(value.positions) &&
+    (value.logicalPositions === undefined || isObject(value.logicalPositions)) &&
     isObject(value.view) &&
     isObject(value.collapsed) &&
     typeof value.exerciseStatement === "string" &&
     ["conceptual", "logical", "ddl"].includes(String(value.tab))
   );
+}
+
+function hydrateAppState(state: AppState): AppState {
+  return {
+    ...state,
+    logicalPositions: isObject(state.logicalPositions) ? state.logicalPositions : state.positions,
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

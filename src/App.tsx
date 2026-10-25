@@ -3,7 +3,7 @@ import { toDiagram } from "./model";
 import { Diagram } from "./Diagram";
 import { Designer } from "./Designer";
 import { DDLPreview } from "./features/ddl-view/DDLPreview";
-import { generateDDL } from "./generateDDL";
+import { buildLogicalTables, generateDDL } from "./generateDDL";
 import type { Column } from "./parser/ddlParser";
 import type { RelationDraft } from "./model";
 import { useAppState } from "./state/useAppState";
@@ -38,6 +38,7 @@ export function App() {
     relationAttributes,
     hierarchies,
     positions,
+    logicalPositions,
     view,
     collapsed,
   } = state;
@@ -50,6 +51,7 @@ export function App() {
   const setDomains = appState.set("domains");
   const setHierarchies = appState.set("hierarchies");
   const setPositions = appState.set("positions", false);
+  const setLogicalPositions = appState.set("logicalPositions", false);
   const setView = appState.set("view", false);
   const setCollapsed = appState.set("collapsed", false);
   const [hierarchyRequest, setHierarchyRequest] = useState(0);
@@ -66,15 +68,22 @@ export function App() {
   } | null>(null);
   const model = useMemo(() => {
     const diagram = toDiagram({ tables, warnings: [] }, hierarchies);
+    const logicalTables = buildLogicalTables(tables, hierarchies, attributeMarks);
+    const logicalDiagram = toDiagram({ tables: logicalTables, warnings: [] }, hierarchies);
     return {
       ...diagram,
+      logicalEntities: logicalDiagram.entities,
+      logicalRelations: logicalDiagram.logicalRelations,
       relations: diagram.relations.map((relation) => ({
         ...relation,
         attributes: relationAttributes[relation.id] ?? relation.attributes,
       })),
     };
-  }, [tables, hierarchies, relationAttributes]);
-  const outputDDL = useMemo(() => generateDDL(tables, hierarchies), [tables, hierarchies]);
+  }, [tables, hierarchies, relationAttributes, attributeMarks]);
+  const outputDDL = useMemo(
+    () => generateDDL(tables, hierarchies, attributeMarks),
+    [tables, hierarchies, attributeMarks],
+  );
   const createRelation = (draft: RelationDraft): boolean => {
     const result = createRelationOperation(domainState(), draft);
     if (!result.ok) return false;
@@ -228,6 +237,8 @@ export function App() {
               setHierarchies={setHierarchies}
               positions={positions}
               setPositions={setPositions}
+              logicalPositions={logicalPositions}
+              setLogicalPositions={setLogicalPositions}
               view={view}
               setView={setView}
               collapsed={collapsed}

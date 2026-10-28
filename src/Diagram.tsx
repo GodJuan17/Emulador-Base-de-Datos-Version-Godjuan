@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MouseEvent as ReactMouseEvent,
+  type SetStateAction,
+} from "react";
 import type {
   AttributeMark,
   DiagramModel,
@@ -8,8 +17,11 @@ import type {
   RelationDraft,
 } from "./model";
 import { sameName } from "./domain/names";
+import { truncateName } from "./display";
 import type { Column, WeakCardinality } from "./parser/ddlParser";
-import type { CanvasPositions, CanvasView } from "./state/appState";
+import { INITIAL_VIEW, type CanvasPositions, type CanvasView } from "./state/appState";
+import { ContextMenu, type ContextMenuItem } from "./components/ContextMenu";
+import type { Theme } from "./theme";
 import {
   point,
   attributePosition,
@@ -71,10 +83,28 @@ export type DiagramProps = {
   editAttribute: (table: string, oldName: string, changes: Partial<Column>) => boolean;
   deleteAttribute: (table: string, name: string) => boolean;
   deleteRelation: (id: string) => void;
+  requestCreateEntity: (position?: { x: number; y: number }) => void;
+  requestCreateWeakEntity: (parent?: string) => void;
+  requestCreateRelation: (source?: string) => void;
+  requestAddAttribute: (entity: string) => void;
+  requestHierarchy: () => void;
+  requestArrange: () => void;
+  theme: Theme;
+  toggleTheme: () => void;
 };
 function getEntity(name: string, entities: Entity[]): Entity | undefined {
   return entities.find((e) => sameName(e.table.name, name));
 }
+type ContextMenuState =
+  | {
+      kind: "canvas";
+      clientX: number;
+      clientY: number;
+      position: { x: number; y: number };
+    }
+  | { kind: "entity"; entity: string; clientX: number; clientY: number }
+  | { kind: "relation"; id: string; clientX: number; clientY: number }
+  | { kind: "hierarchy"; id: string; clientX: number; clientY: number };
 export function Diagram({
   model,
   conceptual,
@@ -110,6 +140,14 @@ export function Diagram({
   editAttribute,
   deleteAttribute,
   deleteRelation,
+  requestCreateEntity,
+  requestCreateWeakEntity,
+  requestCreateRelation,
+  requestAddAttribute,
+  requestHierarchy,
+  requestArrange,
+  theme,
+  toggleTheme,
 }: DiagramProps) {
   const diagramProps: DiagramProps = {
     model,
@@ -146,6 +184,14 @@ export function Diagram({
     editAttribute,
     deleteAttribute,
     deleteRelation,
+    requestCreateEntity,
+    requestCreateWeakEntity,
+    requestCreateRelation,
+    requestAddAttribute,
+    requestHierarchy,
+    requestArrange,
+    theme,
+    toggleTheme,
   };
 
   const [drag, setDrag] = useState<{ name: string; dx: number; dy: number } | null>(null);
@@ -160,6 +206,7 @@ export function Diagram({
   } | null>(null);
   const [selectedRelation, setSelectedRelation] = useState<string | null>(null);
   const [selectedHierarchy, setSelectedHierarchy] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [hierarchyDraft, setHierarchyDraft] = useState({
     supertype: "",
@@ -388,6 +435,237 @@ export function Diagram({
       window.alert(error instanceof Error ? error.message : "No se pudo exportar el PDF.");
     }
   };
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const canvasPoint = (clientX: number, clientY: number) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+    return {
+      x: view.x + ((clientX - rect.left) / rect.width) * view.width,
+      y: view.y + ((clientY - rect.top) / rect.height) * view.height,
+    };
+  };
+  const openCanvasMenu = (event: ReactMouseEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    setContextMenu({
+      kind: "canvas",
+      clientX: event.clientX,
+      clientY: event.clientY,
+      position: canvasPoint(event.clientX, event.clientY),
+    });
+  };
+  const openEntityMenu = (event: ReactMouseEvent<SVGGElement>, name: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      kind: "entity",
+      entity: name,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+  };
+  const openRelationMenu = (event: ReactMouseEvent<SVGGElement>, id: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ kind: "relation", id, clientX: event.clientX, clientY: event.clientY });
+  };
+  const openHierarchyMenu = (event: ReactMouseEvent<SVGGElement>, id: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ kind: "hierarchy", id, clientX: event.clientX, clientY: event.clientY });
+  };
+  const zoomBy = (factor: number) =>
+    setView((current) => {
+      const width = Math.min(2200, Math.max(300, current.width * factor));
+      const height = width * (current.height / current.width);
+      const centerX = current.x + current.width / 2;
+      const centerY = current.y + current.height / 2;
+      return { x: centerX - width / 2, y: centerY - height / 2, width, height };
+    });
+  const fitView = useCallback(() => {
+    const visible = conceptual ? entities.filter((entity) => !entity.associative) : logicalEntities;
+    if (!visible.length) {
+      setView(INITIAL_VIEW);
+      return;
+    }
+    const left = Math.min(...visible.map((entity) => entity.x - 170));
+    const right = Math.max(...visible.map((entity) => entity.x + 170));
+    const top = Math.min(...visible.map((entity) => entity.y - 120));
+    const bottom = Math.max(...visible.map((entity) => entity.y + 120));
+    const ratio = INITIAL_VIEW.width / INITIAL_VIEW.height;
+    let width = Math.max(420, right - left);
+    let height = Math.max(300, bottom - top);
+    if (width / height < ratio) width = height * ratio;
+    else height = width / ratio;
+    setView({
+      x: (left + right) / 2 - width / 2,
+      y: (top + bottom) / 2 - height / 2,
+      width,
+      height,
+    });
+  }, [conceptual, entities, logicalEntities, setView]);
+  const openRelationEditor = (id: string) => {
+    setSelectedRelation(id);
+    setSelectedAttribute(null);
+    setSelectedEntity(null);
+    setSelectedHierarchy(null);
+  };
+  const openHierarchyEditor = (id: string) => {
+    setSelectedHierarchy(id);
+    setSelectedEntity(null);
+    setSelectedAttribute(null);
+    setSelectedRelation(null);
+  };
+  const contextMenuItems: ContextMenuItem[] = (() => {
+    if (!contextMenu) return [];
+    if (contextMenu.kind === "canvas") {
+      const strongEntities = entities.filter((entity) => !entity.associative);
+      const canCreateWeak = strongEntities.some((entity) => entity.table.primaryKey.length > 0);
+      return [
+        {
+          label: "Nueva entidad",
+          icon: "＋",
+          onSelect: () => requestCreateEntity(contextMenu.position),
+        },
+        {
+          label: "Nueva entidad débil",
+          icon: "◇",
+          disabled: !canCreateWeak,
+          onSelect: () => requestCreateWeakEntity(),
+        },
+        {
+          label: "Nueva interrelación",
+          icon: "⟡",
+          disabled: !strongEntities.length,
+          onSelect: () => requestCreateRelation(),
+        },
+        {
+          label: "Nueva herencia",
+          icon: "△",
+          disabled: strongEntities.length < 3,
+          onSelect: requestHierarchy,
+        },
+        { separator: true },
+        {
+          label: "Ordenar y ajustar",
+          icon: "✦",
+          disabled: strongEntities.length < 2,
+          onSelect: requestArrange,
+        },
+        { label: "Centrar vista", icon: "⌖", onSelect: fitView },
+        { label: "Descargar PDF", icon: "⇩", onSelect: () => void exportPdf() },
+        { separator: true },
+        {
+          label: theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
+          icon: theme === "dark" ? "☀" : "☾",
+          onSelect: toggleTheme,
+        },
+      ];
+    }
+    if (contextMenu.kind === "entity") {
+      const target = entities.find((entity) => sameName(entity.table.name, contextMenu.entity));
+      const canBeWeakParent = Boolean(target?.table.primaryKey.length) && !target?.associative;
+      return [
+        {
+          label: "Agregar atributo",
+          icon: "＋",
+          onSelect: () => requestAddAttribute(contextMenu.entity),
+        },
+        {
+          label: "Editar entidad y atributos",
+          icon: "✎",
+          onSelect: () => requestEntityEdit(contextMenu.entity),
+        },
+        { separator: true },
+        {
+          label: "Crear interrelación desde aquí",
+          icon: "⟡",
+          onSelect: () => requestCreateRelation(contextMenu.entity),
+        },
+        {
+          label: "Crear entidad débil dependiente",
+          icon: "◇",
+          disabled: !canBeWeakParent,
+          onSelect: () => requestCreateWeakEntity(contextMenu.entity),
+        },
+        ...(conceptual
+          ? [
+              { separator: true as const },
+              {
+                label: collapsed[contextMenu.entity]
+                  ? "Mostrar todos los atributos"
+                  : "Ocultar atributos secundarios",
+                icon: collapsed[contextMenu.entity] ? "＋" : "−",
+                onSelect: () =>
+                  setCollapsed((current) => ({
+                    ...current,
+                    [contextMenu.entity]: !current[contextMenu.entity],
+                  })),
+              },
+            ]
+          : []),
+        { separator: true },
+        {
+          label: "Eliminar entidad",
+          icon: "🗑",
+          danger: true,
+          onSelect: () => {
+            if (
+              window.confirm(
+                `¿Eliminar la entidad «${contextMenu.entity}» y sus relaciones asociadas?`,
+              )
+            )
+              deleteEntity(contextMenu.entity);
+          },
+        },
+      ];
+    }
+    if (contextMenu.kind === "relation") {
+      return [
+        {
+          label: "Editar interrelación",
+          icon: "✎",
+          onSelect: () => openRelationEditor(contextMenu.id),
+        },
+        {
+          label: "Eliminar interrelación",
+          icon: "🗑",
+          danger: true,
+          onSelect: () => {
+            if (window.confirm("¿Eliminar esta interrelación?")) deleteRelation(contextMenu.id);
+          },
+        },
+      ];
+    }
+    return [
+      {
+        label: "Editar herencia",
+        icon: "✎",
+        onSelect: () => openHierarchyEditor(contextMenu.id),
+      },
+      {
+        label: "Quitar herencia",
+        icon: "⌫",
+        danger: true,
+        onSelect: () => {
+          if (window.confirm("¿Quitar esta herencia del modelo?"))
+            setHierarchies((current) =>
+              current.filter((hierarchy) => hierarchy.id !== contextMenu.id),
+            );
+        },
+      },
+    ];
+  })();
+  const contextMenuLabel =
+    contextMenu?.kind === "canvas"
+      ? "Acciones del tablero"
+      : contextMenu?.kind === "entity"
+        ? contextMenu.entity
+        : contextMenu?.kind === "relation"
+          ? (model.relations.find((relation) => relation.id === contextMenu.id)?.name ??
+            "Interrelación")
+          : contextMenu?.kind === "hierarchy"
+            ? "Herencia"
+            : undefined;
   const setAttributeKind = (kind: AttributeMark["kind"] | "simple") => {
     if (!selectedAttribute) return;
     const key = [selectedAttribute.entity, selectedAttribute.attribute].join(".");
@@ -506,354 +784,407 @@ export function Diagram({
           Descargar PDF
         </button>
       </div>
-      <svg
-        ref={svgRef}
-        className={relationTool ? "diagram-svg relationship-mode" : "diagram-svg"}
-        viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-        role="img"
-        aria-label={conceptual ? "Modelo conceptual entidad relación" : "Modelo lógico de tablas"}
-        onPointerDown={startPan}
-        onPointerMove={move}
-        onPointerUp={endPointer}
-        onPointerLeave={endPointer}
-        onWheel={wheelZoom}
-      >
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-            <path d="M0 0L8 4L0 8z" fill="#7e929d" />
-          </marker>
-          <marker
-            id="multi-arrow"
-            markerWidth="10"
-            markerHeight="10"
-            viewBox="0 0 8 8"
-            refX="8"
-            refY="4"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0L8 4M0 4L8 4M0 8L8 4" fill="none" stroke="#7e929d" strokeWidth="1.2" />
-          </marker>
-        </defs>
-        {conceptual &&
-          entities.flatMap((child) =>
-            child.table.foreignKeys
-              .filter((fk) => fk.dependency === "ID")
-              .flatMap((fk) => {
-                const parent = getEntity(fk.table, entities);
-                if (!parent) return [];
-                const parentIdentification = parent.table.foreignKeys.some(
-                  (foreignKey) => foreignKey.dependency === "ID",
-                );
-                const parentKey = fk.targetColumns?.[0] ?? parent.table.primaryKey[0];
-                const from = parentIdentification
-                  ? identifyingIdentifierPoint(
-                      parent,
-                      Boolean(collapsed[parent.table.name]),
-                      attributeAvoidAngles(parent),
-                    )
-                  : attributePoint(
-                      parent,
-                      parentKey,
-                      Boolean(collapsed[parent.table.name]),
-                      attributeAvoidAngles(parent),
-                    );
-                const to = identifyingIdentifierPoint(
-                  child,
-                  Boolean(collapsed[child.table.name]),
-                  attributeAvoidAngles(child),
-                );
-                return from && to ? (
-                  <path
-                    key={`identifying:${parent.table.name}:${child.table.name}`}
-                    d={orthogonalAttributeRoute(
-                      { x: from.x, y: from.y + 7 },
-                      { x: to.x, y: to.y + 7 },
-                      entities,
-                    )}
-                    className="identifying-attribute-edge"
-                  />
-                ) : null;
-              }),
-          )}
-        {relationStart &&
-          (() => {
-            const origin = getEntity(relationStart, entities);
-            return origin ? (
-              <line
-                x1={origin.x}
-                y1={origin.y}
-                x2={relationPointer.x}
-                y2={relationPointer.y}
-                className="relation-preview"
+      <div className="diagram-canvas">
+        <svg
+          ref={svgRef}
+          className={relationTool ? "diagram-svg relationship-mode" : "diagram-svg"}
+          viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
+          role="img"
+          aria-label={conceptual ? "Modelo conceptual entidad relación" : "Modelo lógico de tablas"}
+          onPointerDown={startPan}
+          onPointerMove={move}
+          onPointerUp={endPointer}
+          onPointerLeave={endPointer}
+          onWheel={wheelZoom}
+          onContextMenu={openCanvasMenu}
+        >
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0 0L8 4L0 8z" fill="var(--diagram-edge, #7e929d)" />
+            </marker>
+            <marker
+              id="multi-arrow"
+              markerWidth="10"
+              markerHeight="10"
+              viewBox="0 0 8 8"
+              refX="8"
+              refY="4"
+              orient="auto-start-reverse"
+            >
+              <path
+                d="M0 0L8 4M0 4L8 4M0 8L8 4"
+                fill="none"
+                stroke="var(--diagram-edge, #7e929d)"
+                strokeWidth="1.2"
               />
-            ) : null;
-          })()}
-        {conceptual ? (
-          <>
-            {hierarchies.map((hierarchy) => (
-              <HierarchyNode
-                key={hierarchy.id}
-                hierarchy={hierarchy}
-                entities={entities}
-                onEdit={(id) => {
-                  setSelectedHierarchy(id);
-                  setSelectedEntity(null);
-                  setSelectedAttribute(null);
-                  setSelectedRelation(null);
-                }}
-              />
-            ))}
-            {model.relations.map((relation) => (
-              <RelationshipNode
-                key={relation.id}
-                relation={relation}
-                entities={entities}
-                names={names}
-                relationMinimum={relationMinimum}
-                relationMaximum={relationMaximum}
-                onEditRelation={(id) => {
-                  setSelectedRelation(id);
-                  setSelectedAttribute(null);
-                  setSelectedEntity(null);
-                  setSelectedHierarchy(null);
-                }}
-                onEditAttribute={(entity, attribute) => {
-                  setSelectedAttribute({ entity, attribute });
-                  setSelectedEntity(null);
-                  setSelectedRelation(null);
-                  setSelectedHierarchy(null);
-                }}
-              />
-            ))}
-            {entities
-              .filter((entity) => !entity.associative)
-              .map((entity) => (
-                <ConceptualEntityNode
-                  key={entity.table.name}
-                  entity={entity}
-                  subtype={hierarchies.some((hierarchy) =>
-                    hierarchy.subtypes.some((name) => sameName(name, entity.table.name)),
-                  )}
-                  collapsed={Boolean(collapsed[entity.table.name])}
-                  attributeMarks={attributeMarks}
-                  domains={domains}
-                  selectedAttributeKey={selectedAttributeKey}
-                  onStart={start}
-                  onFinishRelation={finishRelation}
-                  onEditEntity={(name) => {
-                    setSelectedEntity(null);
-                    setSelectedAttribute(null);
-                    setSelectedRelation(null);
-                    setSelectedHierarchy(null);
-                    requestEntityEdit(name);
+            </marker>
+          </defs>
+          {conceptual &&
+            entities.flatMap((child) =>
+              child.table.foreignKeys
+                .filter((fk) => fk.dependency === "ID")
+                .flatMap((fk) => {
+                  const parent = getEntity(fk.table, entities);
+                  if (!parent) return [];
+                  const parentIdentification = parent.table.foreignKeys.some(
+                    (foreignKey) => foreignKey.dependency === "ID",
+                  );
+                  const parentKey = fk.targetColumns?.[0] ?? parent.table.primaryKey[0];
+                  const from = parentIdentification
+                    ? identifyingIdentifierPoint(
+                        parent,
+                        Boolean(collapsed[parent.table.name]),
+                        attributeAvoidAngles(parent),
+                      )
+                    : attributePoint(
+                        parent,
+                        parentKey,
+                        Boolean(collapsed[parent.table.name]),
+                        attributeAvoidAngles(parent),
+                      );
+                  const to = identifyingIdentifierPoint(
+                    child,
+                    Boolean(collapsed[child.table.name]),
+                    attributeAvoidAngles(child),
+                  );
+                  return from && to ? (
+                    <path
+                      key={`identifying:${parent.table.name}:${child.table.name}`}
+                      d={orthogonalAttributeRoute(
+                        { x: from.x, y: from.y + 7 },
+                        { x: to.x, y: to.y + 7 },
+                        entities,
+                      )}
+                      className="identifying-attribute-edge"
+                    />
+                  ) : null;
+                }),
+            )}
+          {relationStart &&
+            (() => {
+              const origin = getEntity(relationStart, entities);
+              return origin ? (
+                <line
+                  x1={origin.x}
+                  y1={origin.y}
+                  x2={relationPointer.x}
+                  y2={relationPointer.y}
+                  className="relation-preview"
+                />
+              ) : null;
+            })()}
+          {conceptual ? (
+            <>
+              {hierarchies.map((hierarchy) => (
+                <HierarchyNode
+                  key={hierarchy.id}
+                  hierarchy={hierarchy}
+                  entities={entities}
+                  onEdit={(id) => {
+                    openHierarchyEditor(id);
                   }}
-                  onEditAttribute={(name, attribute) => {
-                    setSelectedEntity(null);
-                    setSelectedRelation(null);
-                    setSelectedHierarchy(null);
-                    requestEntityEdit(name, attribute);
-                  }}
-                  onToggleCollapsed={(name) =>
-                    setCollapsed((current) => ({ ...current, [name]: !current[name] }))
-                  }
-                  positionAttribute={(item, index, count) =>
-                    attributePosition(item, index, count, attributeAvoidAngles(item))
-                  }
+                  onContextMenu={openHierarchyMenu}
                 />
               ))}
-          </>
-        ) : (
-          <>
-            {hierarchies.flatMap((hierarchy) =>
-              hierarchy.subtypes.map((subtypeName) => {
-                const parent = getEntity(hierarchy.supertype, logicalEntities);
-                const child = getEntity(subtypeName, logicalEntities);
-                if (!parent || !child) return null;
-                const dx = child.x - parent.x;
-                const dy = child.y - parent.y;
-                const length = Math.max(1, Math.hypot(dx, dy));
-                const sx = parent.x + (dx / length) * 108;
-                const sy = parent.y + (dy / length) * 24;
-                const ex = child.x - (dx / length) * 108;
-                const ey = child.y - (dy / length) * 24;
+              {model.relations.map((relation) => (
+                <RelationshipNode
+                  key={relation.id}
+                  relation={relation}
+                  entities={entities}
+                  names={names}
+                  relationMinimum={relationMinimum}
+                  relationMaximum={relationMaximum}
+                  onEditRelation={(id) => {
+                    openRelationEditor(id);
+                  }}
+                  onEditAttribute={(entity, attribute) => {
+                    setSelectedAttribute({ entity, attribute });
+                    setSelectedEntity(null);
+                    setSelectedRelation(null);
+                    setSelectedHierarchy(null);
+                  }}
+                  onContextMenu={openRelationMenu}
+                />
+              ))}
+              {entities
+                .filter((entity) => !entity.associative)
+                .map((entity) => (
+                  <ConceptualEntityNode
+                    key={entity.table.name}
+                    entity={entity}
+                    subtype={hierarchies.some((hierarchy) =>
+                      hierarchy.subtypes.some((name) => sameName(name, entity.table.name)),
+                    )}
+                    collapsed={Boolean(collapsed[entity.table.name])}
+                    attributeMarks={attributeMarks}
+                    domains={domains}
+                    selectedAttributeKey={selectedAttributeKey}
+                    onStart={start}
+                    onFinishRelation={finishRelation}
+                    onEditEntity={(name) => {
+                      setSelectedEntity(null);
+                      setSelectedAttribute(null);
+                      setSelectedRelation(null);
+                      setSelectedHierarchy(null);
+                      requestEntityEdit(name);
+                    }}
+                    onEditAttribute={(name, attribute) => {
+                      setSelectedEntity(null);
+                      setSelectedRelation(null);
+                      setSelectedHierarchy(null);
+                      requestEntityEdit(name, attribute);
+                    }}
+                    onToggleCollapsed={(name) =>
+                      setCollapsed((current) => ({ ...current, [name]: !current[name] }))
+                    }
+                    onContextMenu={openEntityMenu}
+                    positionAttribute={(item, index, count) =>
+                      attributePosition(item, index, count, attributeAvoidAngles(item))
+                    }
+                  />
+                ))}
+            </>
+          ) : (
+            <>
+              {hierarchies.flatMap((hierarchy) =>
+                hierarchy.subtypes.map((subtypeName) => {
+                  const parent = getEntity(hierarchy.supertype, logicalEntities);
+                  const child = getEntity(subtypeName, logicalEntities);
+                  if (!parent || !child) return null;
+                  const dx = child.x - parent.x;
+                  const dy = child.y - parent.y;
+                  const length = Math.max(1, Math.hypot(dx, dy));
+                  const sx = parent.x + (dx / length) * 108;
+                  const sy = parent.y + (dy / length) * 24;
+                  const ex = child.x - (dx / length) * 108;
+                  const ey = child.y - (dy / length) * 24;
+                  return (
+                    <g key={`${hierarchy.id}:${subtypeName}`} className="hierarchy">
+                      <title>
+                        Implementación relacional: la clave primaria del subtipo también es clave
+                        foránea del supertipo (relación 1:1).
+                      </title>
+                      <line
+                        x1={sx}
+                        y1={sy}
+                        x2={ex}
+                        y2={ey}
+                        className="logic-edge"
+                        markerEnd="url(#arrow)"
+                      />
+                      <text
+                        x={(sx + ex) / 2}
+                        y={(sy + ey) / 2 - 8}
+                        textAnchor="middle"
+                        className="logic-cardinality"
+                      >
+                        1 : 1 · hereda
+                      </text>
+                    </g>
+                  );
+                }),
+              )}
+              {model.logicalRelations.map((r) => {
+                const a = point(getEntity(r.left, logicalEntities), 0);
+                const b = point(getEntity(r.right, logicalEntities), 1);
+                const self = sameName(r.left, r.right);
+                const hierarchyLink = hierarchies.some(
+                  (h) =>
+                    sameName(h.supertype, r.left) && h.subtypes.some((s) => sameName(s, r.right)),
+                );
+                if (hierarchyLink) return null;
+                if (self)
+                  return (
+                    <g key={r.id} className="recursive-relation">
+                      <path
+                        d={
+                          "M" +
+                          (a.x + 45) +
+                          " " +
+                          (a.y - 28) +
+                          " C" +
+                          (a.x + 150) +
+                          " " +
+                          (a.y - 125) +
+                          " " +
+                          (a.x - 150) +
+                          " " +
+                          (a.y - 125) +
+                          " " +
+                          (a.x - 45) +
+                          " " +
+                          (a.y - 28)
+                        }
+                        className="logic-edge recursive-self-edge"
+                        markerEnd="url(#arrow)"
+                      />
+                      <text x={a.x} y={a.y - 82} textAnchor="middle" className="logic-cardinality">
+                        1 : *
+                      </text>
+                    </g>
+                  );
                 return (
-                  <g key={`${hierarchy.id}:${subtypeName}`} className="hierarchy">
-                    <title>
-                      Implementación relacional: la clave primaria del subtipo también es clave
-                      foránea del supertipo (relación 1:1).
-                    </title>
+                  <g key={r.id}>
                     <line
-                      x1={sx}
-                      y1={sy}
-                      x2={ex}
-                      y2={ey}
+                      x1={a.x + 104}
+                      y1={a.y}
+                      x2={b.x - 104}
+                      y2={b.y}
                       className="logic-edge"
                       markerEnd="url(#arrow)"
                     />
-                    <text
-                      x={(sx + ex) / 2}
-                      y={(sy + ey) / 2 - 8}
-                      textAnchor="middle"
-                      className="logic-cardinality"
-                    >
-                      1 : 1 · hereda
+                    <text x={a.x + 107} y={a.y - 10} className="logic-cardinality">
+                      1
+                    </text>
+                    <text x={b.x - 120} y={b.y - 10} className="logic-cardinality">
+                      *
                     </text>
                   </g>
                 );
-              }),
-            )}
-            {model.logicalRelations.map((r) => {
-              const a = point(getEntity(r.left, logicalEntities), 0);
-              const b = point(getEntity(r.right, logicalEntities), 1);
-              const self = sameName(r.left, r.right);
-              const hierarchyLink = hierarchies.some(
-                (h) =>
-                  sameName(h.supertype, r.left) && h.subtypes.some((s) => sameName(s, r.right)),
-              );
-              if (hierarchyLink) return null;
-              if (self)
+              })}
+              {logicalEntities.map((e) => {
+                const { table } = e;
+                const inheritedFrom = hierarchies.find((h) =>
+                  h.subtypes.some((name) => sameName(name, table.name)),
+                )?.supertype;
+                const parentTable = inheritedFrom
+                  ? logicalEntities.find((entity) => sameName(entity.table.name, inheritedFrom))
+                      ?.table
+                  : undefined;
+                const parentForeignKey = inheritedFrom
+                  ? table.foreignKeys.find((fk) => sameName(fk.table, inheritedFrom))
+                  : undefined;
+                const inheritedColumns = new Set(
+                  (parentForeignKey?.columns ?? []).map((name) => name.toLowerCase()),
+                );
+                const inheritedRows =
+                  inheritedFrom && parentTable
+                    ? parentTable.primaryKey.map((parentKey, index) => {
+                        const localName = parentForeignKey?.columns[index] ?? parentKey;
+                        return {
+                          key: `__hierarchy_${inheritedFrom}_${parentKey}`,
+                          markers: "PK FK",
+                          name: `${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
+                        };
+                      })
+                    : [];
+                const ownRows = table.columns
+                  .filter(
+                    (column) =>
+                      !inheritedColumns.has(column.name.toLowerCase()) &&
+                      (!inheritedFrom || !column.primaryKey),
+                  )
+                  .map((column) => {
+                    const isUnique =
+                      column.unique ||
+                      column.alternateKey ||
+                      table.uniqueKeys.some((key) =>
+                        key.some((name) => sameName(name, column.name)),
+                      );
+                    return {
+                      key: column.name,
+                      markers: [
+                        column.primaryKey ? "PK" : "",
+                        column.foreignKey ? "FK" : "",
+                        isUnique && !column.primaryKey ? "UK" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" "),
+                      name: column.name,
+                    };
+                  });
+                const logicalRows = [...inheritedRows, ...ownRows];
+                const h = 40 + logicalRows.length * 25;
                 return (
-                  <g key={r.id} className="recursive-relation">
-                    <path
-                      d={
-                        "M" +
-                        (a.x + 45) +
-                        " " +
-                        (a.y - 28) +
-                        " C" +
-                        (a.x + 150) +
-                        " " +
-                        (a.y - 125) +
-                        " " +
-                        (a.x - 150) +
-                        " " +
-                        (a.y - 125) +
-                        " " +
-                        (a.x - 45) +
-                        " " +
-                        (a.y - 28)
-                      }
-                      className="logic-edge recursive-self-edge"
-                      markerEnd="url(#arrow)"
+                  <g
+                    key={table.name}
+                    className="drag-node"
+                    onPointerDown={(event) => start(event, e)}
+                    onContextMenu={(event) => openEntityMenu(event, table.name)}
+                  >
+                    <rect
+                      x={e.x - 105}
+                      y={e.y - h / 2}
+                      width="210"
+                      height={h}
+                      rx="6"
+                      className="table-box"
                     />
-                    <text x={a.x} y={a.y - 82} textAnchor="middle" className="logic-cardinality">
-                      1 : *
+                    <path
+                      d={`M${e.x - 105} ${e.y - h / 2 + 39}H${e.x + 105}`}
+                      className="table-divider"
+                    />
+                    {logicalRows.length > 0 && (
+                      <path
+                        d={`M${e.x - 64} ${e.y - h / 2 + 43}V${e.y + h / 2 - 5}`}
+                        className="table-key-separator"
+                      />
+                    )}
+                    <text x={e.x} y={e.y - h / 2 + 26} textAnchor="middle" className="table-title">
+                      <title>{table.name}</title>
+                      {truncateName(table.name.toLocaleUpperCase("es"), 22)}
                     </text>
+                    {logicalRows.map((row, i) => (
+                      <g key={row.key}>
+                        <text x={e.x - 98} y={e.y - h / 2 + 59 + i * 25} className="table-key-mark">
+                          {row.markers}
+                        </text>
+                        <text x={e.x - 56} y={e.y - h / 2 + 59 + i * 25} className="table-column">
+                          {row.name}
+                        </text>
+                      </g>
+                    ))}
                   </g>
                 );
-              return (
-                <g key={r.id}>
-                  <line
-                    x1={a.x + 104}
-                    y1={a.y}
-                    x2={b.x - 104}
-                    y2={b.y}
-                    className="logic-edge"
-                    markerEnd="url(#arrow)"
-                  />
-                  <text x={a.x + 107} y={a.y - 10} className="logic-cardinality">
-                    1
-                  </text>
-                  <text x={b.x - 120} y={b.y - 10} className="logic-cardinality">
-                    *
-                  </text>
-                </g>
-              );
-            })}
-            {logicalEntities.map((e) => {
-              const { table } = e;
-              const inheritedFrom = hierarchies.find((h) =>
-                h.subtypes.some((name) => sameName(name, table.name)),
-              )?.supertype;
-              const parentTable = inheritedFrom
-                ? logicalEntities.find((entity) => sameName(entity.table.name, inheritedFrom))
-                    ?.table
-                : undefined;
-              const parentForeignKey = inheritedFrom
-                ? table.foreignKeys.find((fk) => sameName(fk.table, inheritedFrom))
-                : undefined;
-              const inheritedColumns = new Set(
-                (parentForeignKey?.columns ?? []).map((name) => name.toLowerCase()),
-              );
-              const inheritedRows =
-                inheritedFrom && parentTable
-                  ? parentTable.primaryKey.map((parentKey, index) => {
-                      const localName = parentForeignKey?.columns[index] ?? parentKey;
-                      return {
-                        key: `__hierarchy_${inheritedFrom}_${parentKey}`,
-                        markers: "PK FK",
-                        name: `${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
-                      };
-                    })
-                  : [];
-              const ownRows = table.columns
-                .filter(
-                  (column) =>
-                    !inheritedColumns.has(column.name.toLowerCase()) &&
-                    (!inheritedFrom || !column.primaryKey),
-                )
-                .map((column) => {
-                  const isUnique =
-                    column.unique ||
-                    column.alternateKey ||
-                    table.uniqueKeys.some((key) => key.some((name) => sameName(name, column.name)));
-                  return {
-                    key: column.name,
-                    markers: [
-                      column.primaryKey ? "PK" : "",
-                      column.foreignKey ? "FK" : "",
-                      isUnique && !column.primaryKey ? "UK" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" "),
-                    name: column.name,
-                  };
-                });
-              const logicalRows = [...inheritedRows, ...ownRows];
-              const h = 40 + logicalRows.length * 25;
-              return (
-                <g
-                  key={table.name}
-                  className="drag-node"
-                  onPointerDown={(event) => start(event, e)}
-                >
-                  <rect
-                    x={e.x - 105}
-                    y={e.y - h / 2}
-                    width="210"
-                    height={h}
-                    rx="6"
-                    className="table-box"
-                  />
-                  <path
-                    d={`M${e.x - 105} ${e.y - h / 2 + 39}H${e.x + 105}`}
-                    className="table-divider"
-                  />
-                  {logicalRows.length > 0 && (
-                    <path
-                      d={`M${e.x - 64} ${e.y - h / 2 + 43}V${e.y + h / 2 - 5}`}
-                      className="table-key-separator"
-                    />
-                  )}
-                  <text x={e.x} y={e.y - h / 2 + 26} textAnchor="middle" className="table-title">
-                    {table.name.toLocaleUpperCase("es")}
-                  </text>
-                  {logicalRows.map((row, i) => (
-                    <g key={row.key}>
-                      <text x={e.x - 98} y={e.y - h / 2 + 59 + i * 25} className="table-key-mark">
-                        {row.markers}
-                      </text>
-                      <text x={e.x - 56} y={e.y - h / 2 + 59 + i * 25} className="table-column">
-                        {row.name}
-                      </text>
-                    </g>
-                  ))}
-                </g>
-              );
-            })}
-          </>
+              })}
+            </>
+          )}
+        </svg>
+        {model.entities.length === 0 && (
+          <div className="canvas-empty-state">
+            <div className="canvas-empty-card">
+              <span className="canvas-empty-icon" aria-hidden="true">
+                ＋
+              </span>
+              <strong>Aún no hay entidades</strong>
+              <p>
+                Haz clic derecho sobre el tablero o usa las herramientas inferiores para empezar a
+                modelar.
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  requestCreateEntity({
+                    x: view.x + view.width / 2,
+                    y: view.y + view.height / 2,
+                  })
+                }
+              >
+                Crear primera entidad
+              </button>
+            </div>
+          </div>
         )}
-      </svg>
+        <div className="diagram-view-controls" aria-label="Controles de vista">
+          <button type="button" onClick={() => zoomBy(0.85)} title="Alejar" aria-label="Alejar">
+            −
+          </button>
+          <button type="button" className="view-fit" onClick={fitView} title="Ajustar a la vista">
+            Ajustar
+          </button>
+          <button type="button" onClick={() => zoomBy(1.18)} title="Acercar" aria-label="Acercar">
+            ＋
+          </button>
+          <span>{Math.round((INITIAL_VIEW.width / view.width) * 100)}%</span>
+        </div>
+        {model.entities.length > 0 && (
+          <div className="canvas-hint">
+            <span>Clic derecho: acciones</span>
+            <span>Desliza o arrastra: mover</span>
+            <span>Pellizco o rueda: zoom</span>
+          </div>
+        )}
+      </div>
       {conceptual && (
         <div className="mpm-legend">
           <strong>Simbología MPM1999</strong>
@@ -887,6 +1218,15 @@ export function Diagram({
             añaden desde el diseñador.
           </small>
         </div>
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.clientX}
+          y={contextMenu.clientY}
+          items={contextMenuItems}
+          label={contextMenuLabel}
+          onClose={closeContextMenu}
+        />
       )}
     </section>
   );

@@ -1,5 +1,6 @@
-import type { PointerEvent } from "react";
+import type { MouseEvent, PointerEvent } from "react";
 import type { AttributeMark, Entity } from "../../../model";
+import { truncateName } from "../../../display";
 
 type Props = {
   entity: Entity;
@@ -13,6 +14,7 @@ type Props = {
   onEditEntity: (name: string) => void;
   onEditAttribute: (entity: string, attribute: string) => void;
   onToggleCollapsed: (name: string) => void;
+  onContextMenu: (event: MouseEvent<SVGGElement>, name: string) => void;
   positionAttribute: (
     entity: Entity,
     index: number,
@@ -32,6 +34,7 @@ export function ConceptualEntityNode({
   onEditEntity,
   onEditAttribute,
   onToggleCollapsed,
+  onContextMenu,
   positionAttribute,
 }: Props) {
   const attributes = entity.table.columns.filter(
@@ -78,6 +81,7 @@ export function ConceptualEntityNode({
       className="drag-node"
       onPointerDown={(event) => onStart(event, entity)}
       onPointerUp={(event) => onFinishRelation(event, entity)}
+      onContextMenu={(event) => onContextMenu(event, entity.table.name)}
       onDoubleClick={(event) => {
         event.stopPropagation();
         onEditEntity(entity.table.name);
@@ -103,7 +107,8 @@ export function ConceptualEntityNode({
         alignmentBaseline="central"
         className="entity-name"
       >
-        {entity.table.name.toLocaleUpperCase("es")}
+        <title>{entity.table.name}</title>
+        {truncateName(entity.table.name.toLocaleUpperCase("es"), 13)}
       </text>
       {compositeIdentifierPoint && (
         <g className="composite-identifier">

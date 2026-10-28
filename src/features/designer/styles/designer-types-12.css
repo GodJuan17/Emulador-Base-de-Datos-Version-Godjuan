@@ -1,0 +1,118 @@
+/* Selector de tipos integrados de PostgreSQL 18.6. */
+.pg-type-picker {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border, #e2eaec);
+  border-radius: 10px;
+  background: var(--color-surface-muted, #f8fbfc);
+}
+
+.pg-type-picker .form-field {
+  gap: 6px;
+}
+
+.pg-type-picker .pg-type-select select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border, #dbe4e6);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #344f5b);
+  font:
+    12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+
+.pg-type-picker .pg-type-select select:focus-visible,
+.pg-type-picker .pg-type-modifier input:focus-visible,
+.pg-type-picker .pg-type-custom input:focus-visible {
+  outline: 2px solid var(--color-focus, #a8c5d0);
+  outline-offset: 1px;
+  border-color: var(--color-focus, #6e9aaa);
+}
+
+.pg-type-picker .pg-type-modifier input,
+.pg-type-picker .pg-type-custom input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border, #dbe4e6);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #344f5b);
+  font:
+    12px "IBM Plex Mono",
+    monospace;
+}
+
+.pg-type-picker .pg-type-modifier input::placeholder,
+.pg-type-picker .pg-type-custom input::placeholder {
+  color: var(--color-muted, #98a3a7);
+  font-family: "DM Sans", sans-serif;
+}
+
+.pg-type-picker .pg-type-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pg-type-picker .pg-type-meta small {
+  max-width: 68%;
+  color: var(--color-muted, #849399);
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.pg-type-array {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-muted, #607780);
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pg-type-array input {
+  margin: 0;
+  accent-color: var(--color-accent, #527f91);
+}
+
+.pg-type-array code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--color-accent-soft, #eaf2f4);
+  color: var(--color-accent-strong, #456f82);
+  font:
+    600 9px "IBM Plex Mono",
+    monospace;
+}
+
+/* Variante compacta para filas de atributos de entidades débiles. */
+.pg-type-picker.compact {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pg-type-picker.compact .pg-type-select {
+  display: block;
+  gap: 0;
+}
+
+.pg-type-picker.compact .pg-type-select select {
+  padding: 7px 6px;
+  font-size: 10px;
+}
+
+.pg-type-picker.compact .pg-type-meta {
+  display: none;
+}

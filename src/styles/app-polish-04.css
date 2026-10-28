@@ -1,0 +1,108 @@
+/* Pulido visual general: transiciones, foco y microinteracciones. */
+
+button,
+.tabs button,
+.model-tool,
+.entity-card,
+.entity-draft-item,
+.symbol-choice,
+.arrange-model {
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+button:focus-visible,
+.tabs button:focus-visible,
+summary:focus-visible,
+[role="menuitem"]:focus-visible {
+  outline: 2px solid var(--color-focus, #6e9aaa);
+  outline-offset: 2px;
+}
+
+.model-tool:hover:not(:disabled),
+.entity-card:hover,
+.entity-draft-item:hover {
+  transform: translateY(-1px);
+}
+
+.brand-mark {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-brand, #274959) 35%, transparent);
+}
+
+.topbar h1 {
+  letter-spacing: -0.6px;
+}
+
+.statement-panel h2,
+.designer-heading h2,
+.ddl-preview h2 {
+  letter-spacing: -0.3px;
+}
+
+.designer-modal-backdrop {
+  animation: modal-backdrop-in 140ms ease-out;
+}
+
+.designer-modal {
+  animation: modal-pop-in 160ms ease-out;
+}
+
+.tabs button {
+  position: relative;
+}
+
+.tabs button[aria-selected="true"] {
+  font-weight: 700;
+}
+
+.diagram-view-controls button:active,
+.history-controls button:active,
+.diagram-actions button:active,
+.model-tool:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.entity-card {
+  box-shadow: 0 1px 2px #34475005;
+}
+
+.entity-card:hover {
+  box-shadow: 0 8px 20px var(--color-shadow, #263e4918);
+}
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .designer-modal-backdrop,
+  .designer-modal {
+    animation: none;
+  }
+
+  .model-tool:hover:not(:disabled),
+  .entity-card:hover,
+  .entity-draft-item:hover {
+    transform: none;
+  }
+}

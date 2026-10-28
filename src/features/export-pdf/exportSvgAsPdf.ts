@@ -1,6 +1,23 @@
 import { downloadPdfDocument } from "./pdfDocument";
 
 export async function exportSvgAsPdf(svg: SVGSVGElement, filename: string, statement: string) {
+  const root = document.documentElement;
+  const previousTheme = root.dataset.theme;
+  const previousColorScheme = root.style.colorScheme;
+  // El PDF siempre se compone sobre fondo blanco: forzamos el tema claro
+  // mientras se leen los estilos calculados del SVG.
+  root.dataset.theme = "light";
+  root.style.colorScheme = "light";
+  try {
+    await renderSvgAsPdf(svg, filename, statement);
+  } finally {
+    if (previousTheme) root.dataset.theme = previousTheme;
+    else delete root.dataset.theme;
+    root.style.colorScheme = previousColorScheme;
+  }
+}
+
+async function renderSvgAsPdf(svg: SVGSVGElement, filename: string, statement: string) {
   const viewBoxValues = (svg.getAttribute("viewBox") ?? "0 0 720 465")
     .trim()
     .split(/[ ,]+/)

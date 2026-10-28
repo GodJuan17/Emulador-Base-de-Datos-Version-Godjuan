@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { DraftAttribute } from "../DraftAttribute";
 import { WeakEntityDraftPreview } from "../previews/WeakEntityDraftPreview";
+import { PostgresTypePicker } from "../PostgresTypePicker";
 import type { DependencyMark, Table, WeakCardinality } from "../../../parser/ddlParser";
 type WeakDraft = {
   name: string;
@@ -8,6 +9,7 @@ type WeakDraft = {
   dependency: DependencyMark;
   cardinality: WeakCardinality;
   identifier: string;
+  foreignKeyName: string;
   relationName: string;
   attributes: string;
 };
@@ -27,6 +29,8 @@ export function WeakEntityDialogForm({
   tables,
   emptyAttribute,
 }: Props) {
+  const parent = tables.find((table) => table.name === weakDraft.parent);
+  const parentKey = parent?.primaryKey[0] ?? "id";
   return (
     <div className="modal-content entity-preview-form">
       <WeakEntityDraftPreview
@@ -35,9 +39,7 @@ export function WeakEntityDialogForm({
         relationName={weakDraft.relationName}
         dependency={weakDraft.dependency}
         cardinality={weakDraft.cardinality}
-        identifier={
-          weakDraft.dependency === "ID" ? `id_${weakDraft.name || "entidad"}` : weakDraft.identifier
-        }
+        identifier={weakDraft.dependency === "ID" ? weakDraft.foreignKeyName : weakDraft.identifier}
         attributes={weakAttributes.map((attribute) => attribute.name || "atributo")}
         discriminants={weakAttributes
           .filter((attribute) => attribute.primaryKey)
@@ -64,6 +66,22 @@ export function WeakEntityDialogForm({
             placeholder="Familiar"
           />
         </label>
+        <div className="form-field weak-dependency-field">
+          <span>Tipo de dependencia</span>
+          <div className="relation-mode-switch" role="group" aria-label="Tipo de dependencia">
+            {(["E", "ID"] as const).map((value) => (
+              <button
+                type="button"
+                key={value}
+                aria-pressed={weakDraft.dependency === value}
+                onClick={() => setWeakDraft((current) => ({ ...current, dependency: value }))}
+              >
+                {value === "ID" ? "Id" : "Ex"}
+              </button>
+            ))}
+          </div>
+          <small>Ex = existencial · Id = identificativa</small>
+        </div>
         {weakDraft.dependency === "E" ? (
           <label className="form-field">
             Nombre de la llave propia
@@ -87,6 +105,22 @@ export function WeakEntityDialogForm({
             En una relación 1:1, la clave de la entidad fuerte identifica a la entidad débil.
           </small>
         )}
+        {weakDraft.dependency === "ID" && parent?.primaryKey.length === 1 && (
+          <label className="form-field">
+            Nombre de la clave heredada (FK)
+            <input
+              value={weakDraft.foreignKeyName}
+              onChange={(event) =>
+                setWeakDraft((current) => ({
+                  ...current,
+                  foreignKeyName: event.target.value,
+                }))
+              }
+              placeholder={parentKey}
+            />
+            <small>Déjalo vacío para heredar «{parentKey}» del padre.</small>
+          </label>
+        )}
         <div className="attribute-draft-title">
           <strong>Atributos</strong>
         </div>
@@ -106,17 +140,15 @@ export function WeakEntityDialogForm({
                   }
                   placeholder="Nombre del atributo"
                 />
-                <input
-                  aria-label="Tipo de dato"
+                <PostgresTypePicker
+                  compact
+                  label=""
                   value={attribute.type}
-                  onChange={(event) =>
+                  onChange={(type) =>
                     setWeakAttributes((current) =>
-                      current.map((item, i) =>
-                        i === index ? { ...item, type: event.target.value } : item,
-                      ),
+                      current.map((item, i) => (i === index ? { ...item, type } : item)),
                     )
                   }
-                  placeholder="TEXT"
                 />
                 <button
                   type="button"

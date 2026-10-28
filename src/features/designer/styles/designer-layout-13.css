@@ -1,0 +1,58 @@
+/* Compactación del editor de entidades y campo de dependencia de entidades débiles. */
+
+/* Diálogo de creación de entidad más contenido y con desplazamiento interno. */
+.designer-modal:has(.entity-builder-content) {
+  width: min(920px, 100%);
+  max-height: min(88vh, 760px);
+}
+
+.entity-builder-content {
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+  max-height: min(78vh, 660px);
+}
+
+.entity-preview-column,
+.entity-attribute-editor {
+  max-height: min(66vh, 600px);
+  overflow: auto;
+}
+
+.entity-preview-column {
+  align-self: stretch;
+}
+
+.entity-attribute-editor .entity-draft-item-list {
+  max-height: 190px;
+  scrollbar-width: thin;
+}
+
+.entity-attribute-editor .entity-draft-item-list::-webkit-scrollbar,
+.entity-preview-column::-webkit-scrollbar,
+.entity-attribute-editor::-webkit-scrollbar,
+.entity-builder-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.entity-attribute-editor .entity-draft-item-list::-webkit-scrollbar-thumb,
+.entity-preview-column::-webkit-scrollbar-thumb,
+.entity-attribute-editor::-webkit-scrollbar-thumb,
+.entity-builder-content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c4d4d9;
+}
+
+/* Selector de dependencia dentro del panel de campos de la entidad débil. */
+.weak-dependency-field .relation-mode-switch {
+  width: max-content;
+}
+
+@media (max-width: 760px) {
+  .entity-builder-content {
+    grid-template-columns: 1fr;
+  }
+
+  .entity-preview-column,
+  .entity-attribute-editor {
+    max-height: none;
+  }
+}

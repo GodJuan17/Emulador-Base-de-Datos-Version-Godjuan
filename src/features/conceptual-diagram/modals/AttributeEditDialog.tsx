@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { AttributeMark } from "../../../model";
 import type { Column } from "../../../parser/ddlParser";
+import { PostgresTypePicker } from "../../designer/PostgresTypePicker";
 type Selection = { entity: string; attribute: string } | null;
 type Props = {
   selectedAttribute: Selection;
@@ -71,18 +72,13 @@ export function AttributeEditDialog({
                 }}
               />
             </label>
-            <label className="inspector-field">
-              Tipo
-              <input
-                value={selectedColumn.type}
-                onChange={(event) =>
-                  selectedAttribute &&
-                  editAttribute(selectedAttribute.entity, selectedColumn.name, {
-                    type: event.target.value,
-                  })
-                }
-              />
-            </label>
+            <PostgresTypePicker
+              value={selectedColumn.type}
+              onChange={(type) =>
+                selectedAttribute &&
+                editAttribute(selectedAttribute.entity, selectedColumn.name, { type })
+              }
+            />
             <div className="attribute-checks">
               <label>
                 <input

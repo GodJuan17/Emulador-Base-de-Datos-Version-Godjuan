@@ -39,9 +39,10 @@ export function WeakEntityDraftPreview({
               type="button"
               key={value}
               aria-pressed={dependency === value}
+              title={value === "ID" ? "Identificativa (Id)" : "Existencial (Ex)"}
               onClick={() => onDependencyChange(value)}
             >
-              {value}
+              {value === "ID" ? "Id" : "Ex"}
             </button>
           ))}
         </div>
@@ -90,7 +91,7 @@ export function WeakEntityDraftPreview({
         <polygon points="400,150 470,220 400,290 330,220" className="draft-preview-entity" />
         <line x1="365" y1="185" x2="435" y2="185" className="draft-preview-edge" />
         <text x="400" y="178" textAnchor="middle" className="draft-preview-label">
-          {dependency === "ID" ? "ID" : "EX"}
+          {dependency === "ID" ? "Id" : "Ex"}
         </text>
         <foreignObject x="350" y="202" width="100" height="36">
           <input

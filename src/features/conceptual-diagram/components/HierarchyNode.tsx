@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { sameName } from "../../../domain/names";
 import type { Entity, Hierarchy } from "../../../model";
 
@@ -5,13 +6,14 @@ type Props = {
   hierarchy: Hierarchy;
   entities: Entity[];
   onEdit: (id: string) => void;
+  onContextMenu: (event: MouseEvent<SVGGElement>, id: string) => void;
 };
 
 function getEntity(name: string, entities: Entity[]): Entity | undefined {
   return entities.find((entity) => sameName(entity.table.name, name));
 }
 
-export function HierarchyNode({ hierarchy, entities, onEdit }: Props) {
+export function HierarchyNode({ hierarchy, entities, onEdit, onContextMenu }: Props) {
   const supertype = getEntity(hierarchy.supertype, entities);
   const children = hierarchy.subtypes
     .map((name) => getEntity(name, entities))
@@ -35,6 +37,7 @@ export function HierarchyNode({ hierarchy, entities, onEdit }: Props) {
     <g
       key={hierarchy.id}
       className="hierarchy"
+      onContextMenu={(event) => onContextMenu(event, hierarchy.id)}
       onDoubleClick={(event) => {
         event.stopPropagation();
         onEdit(hierarchy.id);

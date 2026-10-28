@@ -5,6 +5,7 @@ import "./tokens.css";
 import "./styles.css";
 import "./mpm.css";
 import "./designer.css";
+import "./theme-dark.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

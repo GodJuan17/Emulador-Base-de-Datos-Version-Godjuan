@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toDiagram } from "./model";
 import { Diagram } from "./Diagram";
 import { Designer } from "./Designer";
@@ -7,6 +7,13 @@ import { buildLogicalTables, generateDDL } from "./generateDDL";
 import type { Column } from "./parser/ddlParser";
 import type { RelationDraft } from "./model";
 import { useAppState } from "./state/useAppState";
+import { useTheme } from "./theme";
+import type {
+  AttributeCreationRequest,
+  EntityCreationRequest,
+  RelationCreationRequest,
+  WeakEntityCreationRequest,
+} from "./features/designer/creationRequests";
 import {
   addAttribute as addAttributeOperation,
   deleteAttribute as deleteAttributeOperation,
@@ -26,7 +33,20 @@ import {
 import type { DomainState } from "./domain/operations/types";
 export function App() {
   const appState = useAppState();
+  const { theme, toggleTheme } = useTheme();
   const { state } = appState;
+  const requestToken = useRef(0);
+  const nextRequestToken = () => ++requestToken.current;
+  const [entityCreateRequest, setEntityCreateRequest] = useState<EntityCreationRequest | null>(
+    null,
+  );
+  const [weakCreateRequest, setWeakCreateRequest] = useState<WeakEntityCreationRequest | null>(
+    null,
+  );
+  const [relationCreateRequest, setRelationCreateRequest] =
+    useState<RelationCreationRequest | null>(null);
+  const [attributeCreateRequest, setAttributeCreateRequest] =
+    useState<AttributeCreationRequest | null>(null);
   const {
     exerciseStatement,
     tables,
@@ -142,6 +162,33 @@ export function App() {
     const result = deleteRelationOperation(domainState(), model.relations, id);
     if (result.ok) applyChanges(result.value);
   };
+  const requestCreateEntity = (position?: { x: number; y: number }) =>
+    setEntityCreateRequest({ token: nextRequestToken(), position });
+  const requestCreateWeakEntity = (parent?: string) =>
+    setWeakCreateRequest({ token: nextRequestToken(), parent });
+  const requestCreateRelation = (source?: string) =>
+    setRelationCreateRequest({ token: nextRequestToken(), source });
+  const requestAddAttribute = (tableName: string) => {
+    const name = addAttribute(tableName);
+    if (!name) return;
+    setAttributeCreateRequest({
+      token: nextRequestToken(),
+      entity: tableName,
+      attribute: name,
+    });
+  };
+  const placeCreatedEntity = (name: string, position?: { x: number; y: number }) => {
+    if (!position) return;
+    setPositions((current) => ({ ...current, [name]: position }));
+    setLogicalPositions((current) => ({ ...current, [name]: position }));
+  };
+  const handleCreationRequestHandled = (token: number) => {
+    setEntityCreateRequest((current) => (current?.token === token ? null : current));
+    setWeakCreateRequest((current) => (current?.token === token ? null : current));
+    setRelationCreateRequest((current) => (current?.token === token ? null : current));
+  };
+  const handleAttributeRequestHandled = (token: number) =>
+    setAttributeCreateRequest((current) => (current?.token === token ? null : current));
   return (
     <main className="app app-shell">
       <header className="topbar">
@@ -156,16 +203,28 @@ export function App() {
             onClick={appState.undo}
             disabled={!appState.canUndo}
             aria-label="Deshacer"
+            title="Deshacer (Ctrl/Cmd + Z)"
           >
-            Deshacer
+            ↶ Deshacer
           </button>
           <button
             type="button"
             onClick={appState.redo}
             disabled={!appState.canRedo}
             aria-label="Rehacer"
+            title="Rehacer (Ctrl/Cmd + Shift + Z)"
           >
-            Rehacer
+            ↷ Rehacer
+          </button>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          >
+            <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+            <span>{theme === "dark" ? "Modo claro" : "Modo oscuro"}</span>
           </button>
         </div>
       </header>
@@ -248,6 +307,14 @@ export function App() {
               editAttribute={editAttribute}
               deleteAttribute={deleteAttribute}
               deleteRelation={deleteRelation}
+              requestCreateEntity={requestCreateEntity}
+              requestCreateWeakEntity={requestCreateWeakEntity}
+              requestCreateRelation={requestCreateRelation}
+              requestAddAttribute={requestAddAttribute}
+              requestHierarchy={() => setHierarchyRequest((value) => value + 1)}
+              requestArrange={() => setArrangeRequest((value) => value + 1)}
+              theme={theme}
+              toggleTheme={toggleTheme}
             />
           </div>
           {tab === "ddl" && <DDLPreview source={outputDDL} />}
@@ -280,6 +347,13 @@ export function App() {
               token: (current?.token ?? 0) + 1,
             }))
           }
+          entityCreateRequest={entityCreateRequest}
+          weakCreateRequest={weakCreateRequest}
+          relationCreateRequest={relationCreateRequest}
+          attributeCreateRequest={attributeCreateRequest}
+          onCreationRequestHandled={handleCreationRequestHandled}
+          onAttributeRequestHandled={handleAttributeRequestHandled}
+          onEntityCreated={placeCreatedEntity}
         />
       </div>
     </main>

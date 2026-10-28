@@ -27,6 +27,13 @@ type Props = {
   editRequest?: { entity: string; attribute?: string; token: number } | null;
   onEditRequestHandled?: (token: number) => void;
   onEntityRenamed?: (oldName: string, newName: string) => void;
+  entityCreateRequest?: EntityCreationRequest | null;
+  weakCreateRequest?: WeakEntityCreationRequest | null;
+  relationCreateRequest?: RelationCreationRequest | null;
+  attributeCreateRequest?: AttributeCreationRequest | null;
+  onCreationRequestHandled?: (token: number) => void;
+  onAttributeRequestHandled?: (token: number) => void;
+  onEntityCreated?: (name: string, position?: { x: number; y: number }) => void;
 };
 const emptyAttribute = (name = "") => ({
   name,
@@ -56,6 +63,12 @@ const relationKindFromMaximums = (maximums: ("1" | "n")[]) =>
 
 import type { DraftAttribute } from "./features/designer/DraftAttribute";
 import type { RelationMode } from "./features/designer/relationPreviewOptions";
+import type {
+  AttributeCreationRequest,
+  EntityCreationRequest,
+  RelationCreationRequest,
+  WeakEntityCreationRequest,
+} from "./features/designer/creationRequests";
 import { EntityMenuModal } from "./features/designer/modals/EntityMenuModal";
 import { AttributeMenuModal } from "./features/designer/modals/AttributeMenuModal";
 
@@ -80,6 +93,13 @@ export function Designer({
   editRequest,
   onEditRequestHandled,
   onEntityRenamed,
+  entityCreateRequest,
+  weakCreateRequest,
+  relationCreateRequest,
+  attributeCreateRequest,
+  onCreationRequestHandled,
+  onAttributeRequestHandled,
+  onEntityCreated,
 }: Props) {
   const hierarchyEntityCount = tables.filter((table) => !isAssociative(table)).length;
   const [dialog, setDialog] = useState<"entity" | "weak" | "relation" | null>(null);
@@ -108,6 +128,7 @@ export function Designer({
     dependency: "ID" as DependencyMark,
     cardinality: "0:N" as WeakCardinality,
     identifier: "",
+    foreignKeyName: "",
     relationName: "",
     attributes: "",
   });
@@ -119,13 +140,18 @@ export function Designer({
   const [attributeMenu, setAttributeMenu] = useState<{ entity: string; name: string } | null>(null);
   const [attributeDraft, setAttributeDraft] = useState<Column | null>(null);
   const [menuError, setMenuError] = useState("");
+  const [pendingEntityPosition, setPendingEntityPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
-  const openEntity = () => {
+  const openEntity = (position?: { x: number; y: number }) => {
     setEditingEntityName(null);
     setEntityName(`entidad_${tables.length + 1}`);
     setAttributes([{ ...emptyAttribute("id"), type: "INTEGER", primaryKey: true, required: true }]);
     setSelectedDraftAttribute(null);
     setEditingDraftAttribute(false);
+    setPendingEntityPosition(position ?? null);
     setError("");
     setDialog("entity");
   };
@@ -164,14 +190,15 @@ export function Designer({
     setAttributes(draft);
     setSelectedDraftAttribute(selectedIndex >= 0 ? selectedIndex : null);
     setEditingDraftAttribute(selectedIndex >= 0);
+    setPendingEntityPosition(null);
     setError("");
     setDialog("entity");
     onEditRequestHandled?.(editRequest.token);
   }, [editRequest?.token]);
-  const openRelation = () => {
+  const openRelation = (source = "") => {
     setRelationMode("binary");
     setRelation({
-      source: "",
+      source: tables.some((table) => sameName(table.name, source)) ? source : "",
       target: "",
       additional: [],
       minimums: [1, 0],
@@ -232,21 +259,40 @@ export function Designer({
       additional: current.additional.filter((_, i) => i !== index),
       minimums: current.minimums.filter((_, i) => i !== index + 2),
     }));
-  const openWeakEntity = () => {
-    const parent = tables.find((table) => table.primaryKey.length > 0);
+  const openWeakEntity = (parentName = "") => {
+    const parent =
+      tables.find((table) => table.name === parentName && table.primaryKey.length > 0) ??
+      tables.find((table) => table.primaryKey.length > 0);
     setWeakDraft({
       name: `entidad_debil_${tables.length + 1}`,
       parent: parent?.name ?? "",
       dependency: "ID",
       cardinality: "0:N",
       identifier: "",
+      foreignKeyName: "",
       relationName: "",
       attributes: "",
     });
     setWeakAttributes([]);
+    setPendingEntityPosition(null);
     setError("");
     setDialog("weak");
   };
+  useEffect(() => {
+    if (!entityCreateRequest) return;
+    openEntity(entityCreateRequest.position);
+    onCreationRequestHandled?.(entityCreateRequest.token);
+  }, [entityCreateRequest?.token]);
+  useEffect(() => {
+    if (!weakCreateRequest) return;
+    openWeakEntity(weakCreateRequest.parent);
+    onCreationRequestHandled?.(weakCreateRequest.token);
+  }, [weakCreateRequest?.token]);
+  useEffect(() => {
+    if (!relationCreateRequest) return;
+    openRelation(relationCreateRequest.source);
+    onCreationRequestHandled?.(relationCreateRequest.token);
+  }, [relationCreateRequest?.token]);
   const saveWeakEntity = () => {
     const name = weakDraft.name.trim();
     const parent = tables.find((table) => table.name === weakDraft.parent);
@@ -287,9 +333,14 @@ export function Designer({
       setError("No se pudieron resolver todos los atributos de la PK de la entidad fuerte.");
       return;
     }
-    const foreignColumns: Column[] = parentColumns.map((column) => {
+    const customForeignKeyName = weakDraft.foreignKeyName.trim();
+    const foreignColumns: Column[] = parentColumns.map((column, index) => {
       const base =
-        weakDraft.dependency === "E" ? `${parent.name.toLowerCase()}_${column.name}` : column.name;
+        weakDraft.dependency === "E"
+          ? `${parent.name.toLowerCase()}_${column.name}`
+          : index === 0 && parentColumns.length === 1 && customForeignKeyName
+            ? customForeignKeyName
+            : column.name;
       let foreignName = base;
       let suffix = 2;
       while (
@@ -369,6 +420,8 @@ export function Designer({
       checks: [],
     };
     onChange([...tables, table]);
+    onEntityCreated?.(name, pendingEntityPosition ?? undefined);
+    setPendingEntityPosition(null);
     const marks = { ...attributeMarks };
     const nextDomains = { ...domains };
     weakAttributes.forEach((attribute) => {
@@ -434,6 +487,8 @@ export function Designer({
       checks: [],
     };
     onChange([...tables, table]);
+    onEntityCreated?.(name, pendingEntityPosition ?? undefined);
+    setPendingEntityPosition(null);
     const marks = { ...attributeMarks };
     attributes.forEach((attribute) => {
       if (attribute.kind !== "simple")
@@ -688,6 +743,18 @@ export function Designer({
     setEntityMenu(null);
     setMenuError("");
   };
+  useEffect(() => {
+    if (!attributeCreateRequest) return;
+    const table = tables.find((item) => sameName(item.name, attributeCreateRequest.entity));
+    const column = attributeCreateRequest.attribute
+      ? table?.columns.find((item) => sameName(item.name, attributeCreateRequest.attribute!))
+      : table
+        ? table.columns[table.columns.length - 1]
+        : undefined;
+    if (!table || !column) return;
+    openAttributeMenu(table.name, column);
+    onAttributeRequestHandled?.(attributeCreateRequest.token);
+  }, [attributeCreateRequest?.token, tables]);
   const updateCurrentAttribute = (patch: Partial<Column>) => {
     if (!attributeMenu || !attributeDraft) return;
     if (!editAttribute(attributeMenu.entity, attributeMenu.name, patch)) {
@@ -719,7 +786,7 @@ export function Designer({
         </div>
       </header>
       <div className="model-tools">
-        <button type="button" className="model-tool" onClick={openEntity}>
+        <button type="button" className="model-tool" onClick={() => openEntity()}>
           <span className="tool-shape entity-shape" aria-hidden="true" />
           <span>
             <strong>Entidad</strong>
@@ -730,7 +797,7 @@ export function Designer({
         <button
           type="button"
           className="model-tool"
-          onClick={openWeakEntity}
+          onClick={() => openWeakEntity()}
           disabled={!tables.some((table) => table.primaryKey.length > 0)}
         >
           <span className="tool-shape weak-entity-shape" aria-hidden="true" />
@@ -743,7 +810,7 @@ export function Designer({
         <button
           type="button"
           className="model-tool"
-          onClick={openRelation}
+          onClick={() => openRelation()}
           disabled={tables.length === 0}
         >
           <span className="tool-shape relation-shape" aria-hidden="true" />
@@ -875,6 +942,7 @@ export function Designer({
             if (event.target === event.currentTarget) {
               setDialog(null);
               setEditingEntityName(null);
+              setPendingEntityPosition(null);
             }
           }}
         >
@@ -909,6 +977,7 @@ export function Designer({
                 onClick={() => {
                   setDialog(null);
                   setEditingEntityName(null);
+                  setPendingEntityPosition(null);
                 }}
               >
                 ×
@@ -963,6 +1032,7 @@ export function Designer({
                     deleteEntity(editingEntityName);
                     setDialog(null);
                     setEditingEntityName(null);
+                    setPendingEntityPosition(null);
                   }}
                 >
                   Eliminar entidad
@@ -974,6 +1044,7 @@ export function Designer({
                 onClick={() => {
                   setDialog(null);
                   setEditingEntityName(null);
+                  setPendingEntityPosition(null);
                 }}
               >
                 Cancelar

@@ -5,4 +5,20 @@
   --color-entity-text: #344e5a;
   --color-entity-border: #526f7c;
   --color-surface: #ffffff;
+  --color-surface-muted: #f8fbfc;
+  --color-border: #dce5e7;
+  --color-border-strong: #cfdee2;
+  --color-muted: #849198;
+  --color-accent: #456f82;
+  --color-accent-strong: #274959;
+  --color-accent-soft: #eaf3f5;
+  --color-focus: #6e9aaa;
+  --color-danger: #9a6464;
+  --color-danger-soft: #fff8f7;
+  --color-shadow: #34475014;
+  --color-diagram-background: #fbfcfc;
+  --color-diagram-dot: #dfe7e9;
+  --color-diagram-edge: #8399a3;
+  --color-node: #ffffff;
+  --color-node-stroke: #7e98a2;
 }

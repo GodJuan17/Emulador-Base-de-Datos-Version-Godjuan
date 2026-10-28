@@ -56,6 +56,7 @@ export function useDiagramPointerHandlers({
 
   const start = (event: PointerEvent<SVGGElement>, entity: Entity) => {
     event.stopPropagation();
+    if (event.button !== 0) return;
     if (conceptual && relationTool) {
       setRelationStart(entity.table.name);
       const r = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
@@ -123,7 +124,21 @@ export function useDiagramPointerHandlers({
     const rect = event.currentTarget.getBoundingClientRect();
     const anchorX = view.x + ((event.clientX - rect.left) / rect.width) * view.width;
     const anchorY = view.y + ((event.clientY - rect.top) / rect.height) * view.height;
-    zoom(event.deltaY < 0 ? 0.9 : 1.1, anchorX, anchorY);
+    // Pellizco (pinch) o Ctrl/Cmd + rueda: zoom anclado al cursor.
+    if (event.ctrlKey || event.metaKey) {
+      zoom(event.deltaY < 0 ? 0.9 : 1.1, anchorX, anchorY);
+      return;
+    }
+    // Deslizamiento de dos dedos sobre el touchpad (o rueda): desplaza el lienzo
+    // sin necesidad de mantener presionado el botón.
+    const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? rect.height / 2 : 1;
+    const deltaX = event.deltaX * unit;
+    const deltaY = event.deltaY * unit;
+    setView((current) => ({
+      ...current,
+      x: current.x - (deltaX / rect.width) * current.width,
+      y: current.y - (deltaY / rect.height) * current.height,
+    }));
   };
   return { move, start, finishRelation, startPan, endPointer, wheelZoom };
 }

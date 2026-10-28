@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { sameName } from "../../../domain/names";
 import type { Entity, Relation } from "../../../model";
 import { point, entityEdge, diamondEdge, cardinalityPoint } from "../geometry";
@@ -14,6 +15,7 @@ type Props = {
   relationMaximum: (relation: Relation, index: number) => "1" | "n";
   onEditRelation: (id: string) => void;
   onEditAttribute: (entity: string, attribute: string) => void;
+  onContextMenu: (event: MouseEvent<SVGGElement>, id: string) => void;
 };
 
 type RelationAttributeProps = {
@@ -71,6 +73,7 @@ export function RelationshipNode({
   relationMaximum,
   onEditRelation,
   onEditAttribute,
+  onContextMenu,
 }: Props) {
   const participants = r.participants ?? [r.left, r.right];
   if (participants.length >= 3) {
@@ -87,7 +90,7 @@ export function RelationshipNode({
       .join(":");
     const openRelationEditor = () => onEditRelation(r.id);
     return (
-      <g key={r.id}>
+      <g key={r.id} onContextMenu={(event) => onContextMenu(event, r.id)}>
         {points.map((p, index) => {
           const start = entityEdge(p, { x: mx, y: my });
           const end = diamondEdge({ x: mx, y: my }, p);
@@ -155,7 +158,11 @@ export function RelationshipNode({
   const loopY = a.y - 88;
   const recursiveLoopPath = `M${endPoint.x} ${endPoint.y} V${loopY} H${mx} V${my - 44}`;
   return (
-    <g key={r.id} className={same ? "recursive-relation" : undefined}>
+    <g
+      key={r.id}
+      className={same ? "recursive-relation" : undefined}
+      onContextMenu={(event) => onContextMenu(event, r.id)}
+    >
       {same ? (
         <>
           <line

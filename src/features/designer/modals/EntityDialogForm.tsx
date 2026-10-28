@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { DraftAttribute } from "../DraftAttribute";
 import { EntityDraftPreview } from "../previews/EntityDraftPreview";
+import { PostgresTypePicker } from "../PostgresTypePicker";
 type Props = {
   entityName: string;
   setEntityName: (name: string) => void;
@@ -100,19 +101,13 @@ export function EntityDialogForm({
             </label>
             {!selectedDraft.primaryKey && (
               <>
-                <label className="form-field">
-                  Tipo
-                  <input
-                    value={selectedDraft.type}
-                    onChange={(event) =>
-                      selectedDraftAttribute !== null &&
-                      updateAttribute(selectedDraftAttribute, {
-                        type: event.target.value,
-                      })
-                    }
-                    placeholder="TEXT"
-                  />
-                </label>
+                <PostgresTypePicker
+                  value={selectedDraft.type}
+                  onChange={(type) =>
+                    selectedDraftAttribute !== null &&
+                    updateAttribute(selectedDraftAttribute, { type })
+                  }
+                />
                 <div className="attribute-checks">
                   <label>
                     <input

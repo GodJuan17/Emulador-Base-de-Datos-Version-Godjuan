@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { AttributeMark } from "../../../model";
 import type { Column, Table } from "../../../parser/ddlParser";
+import { PostgresTypePicker } from "../PostgresTypePicker";
 
 type AttributeSelection = { entity: string; name: string };
 type Props = {
@@ -70,13 +71,10 @@ export function AttributeMenuModal({
                 onChange={(event) => updateCurrentAttribute({ name: event.target.value })}
               />
             </label>
-            <label className="form-field">
-              Tipo
-              <input
-                value={attributeDraft.type}
-                onChange={(event) => updateCurrentAttribute({ type: event.target.value })}
-              />
-            </label>
+            <PostgresTypePicker
+              value={attributeDraft.type}
+              onChange={(type) => updateCurrentAttribute({ type })}
+            />
             <div className="attribute-checks">
               <label>
                 <input

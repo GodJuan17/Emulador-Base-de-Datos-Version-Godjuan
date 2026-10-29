@@ -12,26 +12,58 @@
   gap: 6px;
 }
 
-.pg-type-picker .pg-type-select select {
+/* Botón que abre el desplegable (reemplaza al <select> nativo). */
+.pg-type-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   min-width: 0;
+  padding: 9px 10px;
   border: 1px solid var(--color-border, #dbe4e6);
   border-radius: 7px;
-  padding: 9px 10px;
   background: var(--color-surface, #fff);
   color: var(--color-text, #344f5b);
   font:
     12px "DM Sans",
     sans-serif;
+  text-align: left;
   cursor: pointer;
 }
 
-.pg-type-picker .pg-type-select select:focus-visible,
-.pg-type-picker .pg-type-modifier input:focus-visible,
-.pg-type-picker .pg-type-custom input:focus-visible {
+.pg-type-trigger:hover:not(:disabled) {
+  border-color: var(--color-border-strong, #b8cbd1);
+}
+
+.pg-type-trigger:focus-visible {
   outline: 2px solid var(--color-focus, #a8c5d0);
   outline-offset: 1px;
-  border-color: var(--color-focus, #6e9aaa);
+}
+
+.pg-type-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pg-type-trigger-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.pg-type-trigger-chevron {
+  flex: 0 0 auto;
+  color: var(--color-muted, #85949a);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.pg-type-trigger[aria-expanded="true"] .pg-type-trigger-chevron {
+  transform: rotate(180deg);
 }
 
 .pg-type-picker .pg-type-modifier input,
@@ -46,6 +78,13 @@
   font:
     12px "IBM Plex Mono",
     monospace;
+}
+
+.pg-type-picker .pg-type-modifier input:focus-visible,
+.pg-type-picker .pg-type-custom input:focus-visible {
+  outline: 2px solid var(--color-focus, #a8c5d0);
+  outline-offset: 1px;
+  border-color: var(--color-focus, #6e9aaa);
 }
 
 .pg-type-picker .pg-type-modifier input::placeholder,
@@ -94,6 +133,125 @@
     monospace;
 }
 
+/* Panel desplegable (portal) con desplazamiento interno. */
+.pg-type-menu {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-strong, #cfdee2);
+  border-radius: 12px;
+  background: var(--color-surface, #fff);
+  box-shadow:
+    0 18px 45px #1c333d2b,
+    0 2px 8px #1c333d14;
+  overflow: hidden;
+  animation: pg-menu-in 120ms ease-out;
+}
+
+.pg-type-menu-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.pg-type-menu-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.pg-type-menu-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #c4d4d9;
+  background-clip: padding-box;
+}
+
+.pg-type-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 11px 4px;
+  background: var(--color-surface, #fff);
+  color: var(--color-muted, #7d9098);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pg-type-menu button[role="option"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text, #334d58);
+  text-align: left;
+  font:
+    500 12px "DM Sans",
+    sans-serif;
+  cursor: pointer;
+}
+
+.pg-type-menu button[role="option"]:hover,
+.pg-type-menu button[role="option"]:focus-visible {
+  background: var(--color-accent-soft, #eef4f6);
+  outline: 0;
+}
+
+.pg-type-menu button[role="option"].selected {
+  background: var(--color-accent-soft, #eef4f6);
+  color: var(--color-accent-strong, #1f4c5e);
+  font-weight: 700;
+}
+
+.pg-type-option-name {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+}
+
+.pg-type-option-alias {
+  color: var(--color-muted, #98a3a7);
+  font:
+    500 9px "IBM Plex Mono",
+    monospace;
+  white-space: nowrap;
+}
+
+.pg-type-menu button[role="option"].custom .pg-type-option-name {
+  font-family: "DM Sans", sans-serif;
+  font-style: italic;
+}
+
+.pg-type-menu-footer {
+  padding: 6px 11px;
+  border-top: 1px solid var(--color-border, #e7edef);
+  background: var(--color-surface-muted, #f8fbfc);
+  color: var(--color-muted, #98a3a7);
+  font-size: 9px;
+  text-align: right;
+}
+
+@keyframes pg-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-type-menu {
+    animation: none;
+  }
+}
+
 /* Variante compacta para filas de atributos de entidades débiles. */
 .pg-type-picker.compact {
   display: block;
@@ -108,8 +266,12 @@
   gap: 0;
 }
 
-.pg-type-picker.compact .pg-type-select select {
+.pg-type-picker.compact .pg-type-trigger {
   padding: 7px 6px;
+  font-size: 10px;
+}
+
+.pg-type-picker.compact .pg-type-trigger-value {
   font-size: 10px;
 }
 

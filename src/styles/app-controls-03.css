@@ -7,12 +7,19 @@
   position: relative;
   display: flex;
   flex: 1;
-  min-height: 0;
+  min-height: 380px;
 }
 
 .diagram-canvas .diagram-svg {
   flex: 1;
   height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 600px) {
+  .diagram-canvas {
+    min-height: 300px;
+  }
 }
 
 .history-controls .theme-toggle {

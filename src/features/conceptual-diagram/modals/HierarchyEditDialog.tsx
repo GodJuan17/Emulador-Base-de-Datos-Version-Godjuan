@@ -94,16 +94,29 @@ export function HierarchyEditDialog({
             La PK propia de cada subtipo se sustituye por la PK heredada del supertipo en el modelo
             lógico.
           </p>
-          <button
-            type="button"
-            className="inspector-danger"
-            onClick={() => {
-              setHierarchies((current) => current.filter((item) => item.id !== selectedHierarchy));
-              setSelectedHierarchy(null);
-            }}
-          >
-            Quitar herencia
-          </button>
+          <div className="inspector-buttons">
+            <button
+              type="button"
+              onClick={() => {
+                diagram.requestArrange();
+                setSelectedHierarchy(null);
+              }}
+            >
+              Reorganizar y cerrar
+            </button>
+            <button
+              type="button"
+              className="inspector-danger"
+              onClick={() => {
+                setHierarchies((current) =>
+                  current.filter((item) => item.id !== selectedHierarchy),
+                );
+                setSelectedHierarchy(null);
+              }}
+            >
+              Quitar herencia
+            </button>
+          </div>
         </section>
       </div>
     )

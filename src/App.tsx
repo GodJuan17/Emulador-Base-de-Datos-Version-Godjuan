@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { toDiagram } from "./model";
+import { sameName } from "./domain/names";
 import { Diagram } from "./Diagram";
 import { Designer } from "./Designer";
 import { DDLPreview } from "./features/ddl-view/DDLPreview";
@@ -138,7 +139,17 @@ export function App() {
   };
   const deleteEntity = (name: string) => {
     const result = deleteEntityOperation(domainState(), name);
-    if (result.ok) applyChanges(result.value);
+    if (!result.ok) return;
+    appState.update((current) => {
+      const hierarchies = current.hierarchies
+        .filter((hierarchy) => !sameName(hierarchy.supertype, name))
+        .map((hierarchy) => ({
+          ...hierarchy,
+          subtypes: hierarchy.subtypes.filter((subtype) => !sameName(subtype, name)),
+        }))
+        .filter((hierarchy) => hierarchy.subtypes.length >= 2);
+      return { ...current, ...result.value, hierarchies };
+    });
   };
   const addAttribute = (tableName: string): string | null => {
     const result = addAttributeOperation(domainState(), tableName);

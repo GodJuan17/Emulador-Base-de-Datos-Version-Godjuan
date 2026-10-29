@@ -10,6 +10,7 @@ export function RelationPreview({
   weakCardinality,
   dependency,
   minima,
+  maximums,
 }: {
   left: string;
   right: string;
@@ -19,17 +20,16 @@ export function RelationPreview({
   weakCardinality?: WeakCardinality;
   dependency?: string;
   minima: (0 | 1)[];
+  maximums?: ("1" | "n")[];
 }) {
   const rightMax = weakCardinality
     ? weakCardinality.endsWith(":1")
       ? "1"
       : "n"
-    : kind === "1:1"
-      ? "1"
-      : kind === "1:N"
-        ? "n"
-        : "n";
-  const leftMax = weakCardinality ? "1" : kind === "1:N" ? "1" : kind === "1:1" ? "1" : "n";
+    : (maximums?.[1] ?? (kind === "1:1" ? "1" : kind === "N:1" ? "1" : kind === "1:N" ? "n" : "n"));
+  const leftMax = weakCardinality
+    ? "1"
+    : (maximums?.[0] ?? (kind === "N:1" ? "n" : kind === "1:1" ? "1" : kind === "1:N" ? "1" : "n"));
   if (participants.length > 2) {
     const points = [
       { x: 300, y: 42 },

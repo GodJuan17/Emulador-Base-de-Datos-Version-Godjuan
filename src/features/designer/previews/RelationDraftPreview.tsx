@@ -52,6 +52,22 @@ export function RelationDraftPreview({
     mode === "nary"
       ? "N-aria"
       : (maximums[0] ?? "1").toUpperCase() + ":" + (maximums[1] ?? "n").toUpperCase();
+  const kindOptions = ["1:1", "1:N", "N:1", "N:M"] as const;
+  const applyKind = (kind: (typeof kindOptions)[number]) => {
+    if (kind === "1:1") {
+      setCardinality(0, 1, "1");
+      setCardinality(1, 1, "1");
+    } else if (kind === "1:N") {
+      setCardinality(0, 1, "1");
+      setCardinality(1, 0, "n");
+    } else if (kind === "N:1") {
+      setCardinality(0, 0, "n");
+      setCardinality(1, 1, "1");
+    } else {
+      setCardinality(0, 0, "n");
+      setCardinality(1, 0, "n");
+    }
+  };
   const choose = (index: number) => {
     const key = "p" + index;
     const value = participants[index];
@@ -189,6 +205,27 @@ export function RelationDraftPreview({
           ))}
         </div>
       </header>
+      {mode !== "nary" && (
+        <div
+          className="relation-mode-switch relation-kind-switch"
+          role="group"
+          aria-label="Cardinalidad de la interrelación"
+        >
+          {kindOptions.map((kind) => (
+            <button
+              type="button"
+              key={kind}
+              aria-pressed={ratio === kind}
+              onClick={() => {
+                setOpen(null);
+                applyKind(kind);
+              }}
+            >
+              {kind}
+            </button>
+          ))}
+        </div>
+      )}
       {mode === "nary" ? (
         <div className="relation-nary-preview">
           <div className="relation-nary-stage">

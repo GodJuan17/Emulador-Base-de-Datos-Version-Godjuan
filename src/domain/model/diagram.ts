@@ -120,16 +120,21 @@ function createLogicalRelation(
   const identifying = foreignKey.columns.every((column) =>
     table.primaryKey.some((primaryKey) => sameName(primaryKey, column)),
   );
+  const kind = relationKind(table, foreignKey);
+  const ownerFirst = kind === "N:1";
   return {
     id: `logical:${normalizeName(table.name)}:${foreignKey.columns.map(normalizeName).join(",")}`,
     name: `${target.name}_${table.name}`,
-    left: target.name,
-    right: table.name,
-    kind: fkUnique(table, foreignKey.columns) ? "1:1" : "1:N",
+    left: ownerFirst ? table.name : target.name,
+    right: ownerFirst ? target.name : table.name,
+    kind,
     attributes: [],
     foreignKeyNullable: nullable,
     identifying,
     dependency: foreignKey.dependency,
+    participantMaximums:
+      foreignKey.participantMaximums ??
+      (kind === "1:1" ? ["1", "1"] : ownerFirst ? ["n", "1"] : ["1", "n"]),
   };
 }
 
@@ -194,26 +199,33 @@ function createConceptualRelation(
       ? `${table.name} tiene una PK mixta de FK y columnas propias; podría ser una entidad ` +
         "débil identificada."
       : undefined;
+  const kind = relationKind(table, foreignKey);
+  const ownerFirst = kind === "N:1";
   return {
     relation: {
       id: `fk:${normalizeName(table.name)}:${foreignKey.columns.map(normalizeName).join(",")}`,
       name: foreignKey.relationName ?? `${target.name}_${table.name}`,
-      left: target.name,
-      right: table.name,
-      kind: relationKind(table, foreignKey),
+      left: ownerFirst ? table.name : target.name,
+      right: ownerFirst ? target.name : table.name,
+      kind,
       attributes: [],
       foreignKeyNullable: nullable,
       identifying: foreignKeyInPrimaryKey,
       dependency,
       weakCardinality: foreignKey.weakCardinality,
       roles: foreignKey.roles,
-      participantMaximums: foreignKey.participantMaximums,
+      participantMaximums:
+        foreignKey.participantMaximums ??
+        (kind === "1:1" ? ["1", "1"] : ownerFirst ? ["n", "1"] : ["1", "n"]),
     },
     warning,
   };
 }
 
 function relationKind(table: Table, foreignKey: Table["foreignKeys"][number]): Relation["kind"] {
-  if (!foreignKey.weakCardinality) return fkUnique(table, foreignKey.columns) ? "1:1" : "1:N";
-  return foreignKey.weakCardinality.endsWith(":1") ? "1:1" : "1:N";
+  if (foreignKey.weakCardinality) {
+    return foreignKey.weakCardinality.endsWith(":1") ? "1:1" : "1:N";
+  }
+  if (foreignKey.relationKind) return foreignKey.relationKind;
+  return fkUnique(table, foreignKey.columns) ? "1:1" : "1:N";
 }

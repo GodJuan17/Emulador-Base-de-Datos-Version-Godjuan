@@ -85,6 +85,8 @@ export function useDiagramPointerHandlers({
       name: `${relationStart}_${entity.table.name}`,
       kind: "1:N",
       mandatory: true,
+      participantMinimums: [1, 1],
+      participantMaximums: ["1", "n"],
     });
     setRelationStart(null);
   };

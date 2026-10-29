@@ -13,6 +13,7 @@ type Props = {
   setSelectedEntity: Dispatch<SetStateAction<string | null>>;
   setSelectedHierarchy: Dispatch<SetStateAction<string | null>>;
   relationMinimum: (relation: Relation, index: number) => 0 | 1;
+  relationMaximum: (relation: Relation, index: number) => "1" | "n";
   updateRecursiveRole: (index: 0 | 1, value: string) => void;
   updateRelationMinimum: (id: string, count: number, index: number, value: 0 | 1) => void;
 };
@@ -22,6 +23,7 @@ export function RelationEditDialog({
   selectedRelationModel,
   setSelectedRelation,
   relationMinimum,
+  relationMaximum,
   updateRecursiveRole,
   updateRelationMinimum,
 }: Props) {
@@ -67,6 +69,10 @@ export function RelationEditDialog({
             minima={[
               relationMinimum(selectedRelationModel, 0),
               relationMinimum(selectedRelationModel, 1),
+            ]}
+            maximums={[
+              relationMaximum(selectedRelationModel, 0),
+              relationMaximum(selectedRelationModel, 1),
             ]}
           />
           <label className="inspector-field">
@@ -132,8 +138,9 @@ export function RelationEditDialog({
                   }
                 >
                   <option value="1:N">1:N</option>
+                  <option value="N:1">N:1</option>
                   <option value="1:1">1:1</option>
-                  <option value="N:M">N:M</option>
+                  {selectedRelationModel.kind === "N:M" && <option value="N:M">N:M</option>}
                 </select>
               </label>
               {(

@@ -212,18 +212,34 @@
   stroke-width: 1.6;
   fill: none;
 }
-.hierarchy-triangle {
+.hierarchy-circle {
   fill: #fff;
   stroke: var(--color-entity-border);
-  stroke-width: 2;
+  stroke-width: 1.8;
+}
+.hierarchy-circle.total {
+  fill: var(--color-entity-border);
 }
 .hierarchy-arc {
   fill: none;
   stroke: var(--color-entity-border);
   stroke-width: 2;
 }
-.hierarchy-total {
+.hierarchy-total-stem {
+  stroke-width: 1.2;
+}
+.hierarchy-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+.hierarchy-symbol {
+  fill: #3d5f6d;
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.hierarchy-symbol.total {
   fill: #fff;
-  stroke: var(--color-entity-border);
-  stroke-width: 1.6;
 }

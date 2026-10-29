@@ -294,6 +294,7 @@ function addSubtypeKeys(tables: Table[], hierarchy: HierarchyRecord, supertype: 
     .map((name) => supertype.columns.find((column) => sameName(column.name, name)))
     .filter((column): column is Column => Boolean(column));
   const keyNames = referencedColumns.map((column) => column.name);
+  const inheritedNames = new Set(keyNames.map((name) => name.toLowerCase()));
   return tables.map((table) => {
     if (!hierarchy.subtypes.some((subtype) => sameName(subtype, table.name))) return table;
     const columns = referencedColumns.map((referenced) =>
@@ -301,9 +302,16 @@ function addSubtypeKeys(tables: Table[], hierarchy: HierarchyRecord, supertype: 
     );
     const foreignKey = createSubtypeForeignKey(columns, supertype);
     const foreignKeys = replaceHierarchyForeignKey(table.foreignKeys, foreignKey);
+    // La PK propia del subtipo se sustituye por la heredada: deja de ser PK,
+    // pero se conserva como atributo propio para no perder información.
+    const demoted = table.columns.map((column) =>
+      column.primaryKey && !inheritedNames.has(column.name.toLowerCase())
+        ? { ...column, primaryKey: false }
+        : column,
+    );
     return {
       ...table,
-      columns: replaceColumns(table.columns, columns),
+      columns: replaceColumns(demoted, columns),
       primaryKey: keyNames,
       foreignKeys,
     };
@@ -341,10 +349,13 @@ function replaceHierarchyForeignKey(
   foreignKeys: ForeignKey[],
   replacement: ForeignKey,
 ): ForeignKey[] {
+  // Solo puede existir una FK de herencia por subtipo: se sustituye la que
+  // apunta a la misma clave del supertipo, pero se conservan otras relaciones
+  // del subtipo con el supertipo que usen columnas destino distintas.
   const otherKeys = foreignKeys.filter(
     (foreignKey) =>
       !sameName(foreignKey.table, replacement.table) ||
-      !sameColumnSet(foreignKey.columns, replacement.columns),
+      !sameColumnSet(foreignKey.targetColumns ?? [], replacement.targetColumns ?? []),
   );
   return [...otherKeys, replacement];
 }

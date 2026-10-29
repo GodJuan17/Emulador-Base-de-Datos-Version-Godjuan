@@ -112,14 +112,20 @@ function createBinaryRelation(
   source: Table,
   target: Table,
 ): Result<RelationState> {
-  const addition = createForeignKeyColumns(target, source, draft.mandatory, draft.kind);
+  // En 1:N la FK vive en el lado N (destino). En N:1 el lado N es el origen.
+  const owner = draft.kind === "N:1" ? source : target;
+  const referenced = draft.kind === "N:1" ? target : source;
+  const addition = createForeignKeyColumns(owner, referenced, draft.mandatory, draft.kind);
+  addition.foreignKey.relationKind =
+    draft.kind === "N:1" ? "N:1" : draft.kind === "1:1" ? "1:1" : "1:N";
+  addition.foreignKey.participantMaximums =
+    draft.participantMaximums ??
+    (draft.kind === "1:1" ? ["1", "1"] : draft.kind === "N:1" ? ["n", "1"] : ["1", "n"]);
   if (draft.roles) addition.foreignKey.roles = draft.roles;
-  if (draft.participantMaximums)
-    addition.foreignKey.participantMaximums = draft.participantMaximums;
   const extra = createRelationAttributes(draft.attributes ?? []);
   if (
     hasDuplicateNames(
-      [...target.columns, ...addition.columns, ...extra].map((column) => column.name),
+      [...owner.columns, ...addition.columns, ...extra].map((column) => column.name),
     )
   ) {
     return failure(
@@ -127,7 +133,7 @@ function createBinaryRelation(
       "La relación genera nombres de columnas duplicados.",
     );
   }
-  return success(addBinaryRelation(state, target, source, draft, addition, extra));
+  return success(addBinaryRelation(state, owner, referenced, draft, addition, extra));
 }
 
 function addBinaryRelation(

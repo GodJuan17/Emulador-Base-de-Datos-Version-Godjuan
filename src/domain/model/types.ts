@@ -13,7 +13,7 @@ export type AttributeId = string;
 export type RelationshipId = string;
 export type HierarchyId = string;
 
-export type RelationKind = "1:N" | "1:1" | "N:M";
+export type RelationKind = "1:N" | "N:1" | "1:1" | "N:M";
 
 export type RelationDraft = {
   source: string;

@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { sameName } from "../../../domain/names";
 import type { Entity, Hierarchy } from "../../../model";
+import { hierarchyGeometry, type HierarchyBox } from "../hierarchyGeometry";
 
 type Props = {
   hierarchy: Hierarchy;
@@ -13,30 +14,39 @@ function getEntity(name: string, entities: Entity[]): Entity | undefined {
   return entities.find((entity) => sameName(entity.table.name, name));
 }
 
+function box(entity: Entity): HierarchyBox {
+  return { x: entity.x, y: entity.y, halfWidth: 78, halfHeight: 28 };
+}
+
+function labelPoint(from: { x: number; y: number }, to: { x: number; y: number }, side: number) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const x = from.x + dx * 0.52 - (dy / length) * 13 * side;
+  const y = from.y + dy * 0.52 + (dx / length) * 13 * side;
+  return { x, y };
+}
+
 export function HierarchyNode({ hierarchy, entities, onEdit, onContextMenu }: Props) {
   const supertype = getEntity(hierarchy.supertype, entities);
   const children = hierarchy.subtypes
     .map((name) => getEntity(name, entities))
     .filter((entity): entity is Entity => Boolean(entity));
   if (!supertype || children.length < 2) return null;
-  const centerX = children.reduce((sum, entity) => sum + entity.x, 0) / children.length;
-  const childY = children.reduce((sum, entity) => sum + entity.y, 0) / children.length;
-  const centerY = (supertype.y + childY) / 2;
-  const apexY = centerY - 22;
-  const baseY = centerY + 18;
-  const arcReach = Math.max(90, ...children.map((child) => Math.abs(child.x - centerX) + 24));
-  const arcPath = [
-    `M${centerX - arcReach} ${baseY + 10}`,
-    `Q${centerX} ${baseY + 88}`,
-    `${centerX + arcReach} ${baseY + 10}`,
-  ].join(" ");
+  const geometry = hierarchyGeometry(box(supertype), children.map(box));
+  if (!geometry) return null;
   const exclusiveLabel = hierarchy.exclusive ? "Exclusiva" : "Solapada";
   const totalLabel = hierarchy.total ? "total" : "parcial";
   const description = `${exclusiveLabel} y ${totalLabel}. Doble clic para ver opciones.`;
+  const supertypeLabel = labelPoint(geometry.stem[0], geometry.connector, -1);
   return (
     <g
       key={hierarchy.id}
       className="hierarchy"
+      role="group"
+      aria-label={`Herencia ${supertype.table.name} → ${children
+        .map((child) => child.table.name)
+        .join(", ")}. ${description}`}
       onContextMenu={(event) => onContextMenu(event, hierarchy.id)}
       onDoubleClick={(event) => {
         event.stopPropagation();
@@ -44,43 +54,67 @@ export function HierarchyNode({ hierarchy, entities, onEdit, onContextMenu }: Pr
       }}
     >
       <title>{description}</title>
-      <line
-        x1={supertype.x}
-        y1={supertype.y + 29}
-        x2={centerX}
-        y2={apexY}
-        className="hierarchy-edge"
-      />
+      {hierarchy.total ? (
+        geometry.doubleStem.map(([from, to], index) => (
+          <line
+            key={`stem:${index}`}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            className="hierarchy-edge hierarchy-total-stem"
+          />
+        ))
+      ) : (
+        <line
+          x1={geometry.stem[0].x}
+          y1={geometry.stem[0].y}
+          x2={geometry.stem[1].x}
+          y2={geometry.stem[1].y}
+          className="hierarchy-edge"
+        />
+      )}
       <text
-        x={supertype.x + 12}
-        y={supertype.y + 43}
-        textAnchor="start"
+        x={supertypeLabel.x}
+        y={supertypeLabel.y}
+        textAnchor="middle"
         className="hierarchy-cardinality"
       >
         (1,1)
       </text>
-      {children.map((child, index) => {
-        const baseX = centerX + (index - (children.length - 1) / 2) * 38;
+      {geometry.childAnchors.map((anchor, index) => {
+        const end = geometry.childLineEnds[index];
+        const label = labelPoint(anchor, end, index % 2 === 0 ? -1 : 1);
         return (
-          <g key={child.table.name}>
-            <line x1={baseX} y1={apexY} x2={child.x} y2={child.y - 30} className="hierarchy-edge" />
-            <text
-              x={child.x + (child.x < centerX ? -42 : 42)}
-              y={child.y - 39}
-              textAnchor="middle"
-              className="hierarchy-cardinality"
-            >
+          <g key={children[index].table.name}>
+            <line x1={anchor.x} y1={anchor.y} x2={end.x} y2={end.y} className="hierarchy-edge" />
+            <text x={label.x} y={label.y} textAnchor="middle" className="hierarchy-cardinality">
               (0,1)
             </text>
           </g>
         );
       })}
-      <polygon
-        points={`${centerX - 34},${apexY} ${centerX + 34},${apexY} ${centerX},${baseY}`}
-        className="hierarchy-triangle"
+      {hierarchy.exclusive && <path d={geometry.arc} className="hierarchy-arc" />}
+      <circle
+        cx={geometry.connector.x}
+        cy={geometry.connector.y}
+        r={geometry.radius + 8}
+        className="hierarchy-hit"
       />
-      {hierarchy.exclusive && <path d={arcPath} className="hierarchy-arc" />}
-      {hierarchy.total && <circle cx={centerX} cy={apexY - 9} r="5" className="hierarchy-total" />}
+      <circle
+        cx={geometry.connector.x}
+        cy={geometry.connector.y}
+        r={geometry.radius}
+        className={hierarchy.total ? "hierarchy-circle total" : "hierarchy-circle"}
+      />
+      <text
+        x={geometry.connector.x}
+        y={geometry.connector.y + 3.4}
+        textAnchor="middle"
+        className={hierarchy.total ? "hierarchy-symbol total" : "hierarchy-symbol"}
+      >
+        {hierarchy.exclusive ? "d" : "o"}
+      </text>
     </g>
   );
 }

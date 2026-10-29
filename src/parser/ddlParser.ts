@@ -28,6 +28,7 @@ export type ForeignKey = {
   relationName?: string;
   roles?: [string, string];
   participantMaximums?: ("1" | "n")[];
+  relationKind?: "1:N" | "N:1" | "1:1";
 };
 export type CheckConstraint = { expression: string; columns?: string[] };
 export type Table = {

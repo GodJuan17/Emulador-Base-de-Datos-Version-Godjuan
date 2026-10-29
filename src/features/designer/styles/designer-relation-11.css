@@ -144,6 +144,15 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+.relation-kind-switch {
+  width: fit-content;
+  justify-self: center;
+}
+.relation-kind-switch button {
+  min-width: 46px;
+  padding: 7px 8px;
+  font-family: "IBM Plex Mono", monospace;
+}
 
 /* N-aria (3 o 4 entidades) */
 .relation-nary-preview {

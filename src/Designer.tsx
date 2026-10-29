@@ -59,7 +59,9 @@ const relationKindFromMaximums = (maximums: ("1" | "n")[]) =>
     ? ("1:1" as const)
     : maximums[0] === "n" && maximums[1] === "n"
       ? ("N:M" as const)
-      : ("1:N" as const);
+      : maximums[0] === "n" && maximums[1] === "1"
+        ? ("N:1" as const)
+        : ("1:N" as const);
 
 import type { DraftAttribute } from "./features/designer/DraftAttribute";
 import type { RelationMode } from "./features/designer/relationPreviewOptions";
@@ -676,41 +678,27 @@ export function Designer({
     const recursive =
       participants.length === 2 &&
       participants[0].toLocaleLowerCase() === participants[1].toLocaleLowerCase();
-    const reverse =
-      participants.length === 2 && relation.maximums[0] === "n" && relation.maximums[1] === "1";
     const kind = participants.length > 2 ? "N:M" : relationKindFromMaximums(relation.maximums);
     const name = relation.name.trim() || "tiene";
-    const orderedParticipants = reverse ? [relation.target, relation.source] : participants;
     const participantMinimums = relation.minimums.slice(0, participants.length);
-    if (reverse)
-      [participantMinimums[0], participantMinimums[1]] = [
-        participantMinimums[1],
-        participantMinimums[0],
-      ];
     const participantMaximums = relation.maximums.slice(0, participants.length);
-    if (reverse)
-      [participantMaximums[0], participantMaximums[1]] = [
-        participantMaximums[1],
-        participantMaximums[0],
-      ];
+    const ownerIndex = kind === "N:1" ? 0 : 1;
     const draft: RelationDraft = {
       ...relation,
-      source: orderedParticipants[0],
-      target: orderedParticipants[1],
-      participants: orderedParticipants,
+      source: participants[0],
+      target: participants[1],
+      participants,
       participantMinimums,
       participantMaximums,
       kind,
-      mandatory: kind !== "N:M" && participantMinimums[1] === 1,
+      mandatory: kind !== "N:M" && participantMinimums[ownerIndex] === 1,
       name,
       associativeTableName:
         kind === "N:M" && participants.length === 2
           ? `${relation.source}_${relation.target}`
           : undefined,
       roles: recursive
-        ? ((reverse ? [...relation.roles].reverse() : relation.roles).map((role) =>
-            role.trim(),
-          ) as [string, string])
+        ? (relation.roles.map((role) => role.trim()) as [string, string])
         : undefined,
       attributes: relation.attributes.map((item) => item.trim()).filter(Boolean),
     };

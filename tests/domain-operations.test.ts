@@ -10,6 +10,8 @@ import { checkFirstNormalForm, checkNormalForm } from "../src/domain/rules/norma
 import { addAttribute, deleteAttribute, editAttribute } from "../src/domain/operations/attributes";
 import { deleteEntity, renameEntity } from "../src/domain/operations/entities";
 import { createRelation } from "../src/domain/operations/relations";
+import { editRelation } from "../src/domain/operations/relationshipEditing";
+import { toDiagram } from "../src/model";
 import type { DomainState } from "../src/domain/operations/types";
 import type { Table } from "../src/parser/ddlParser";
 
@@ -190,5 +192,54 @@ describe("reglas de creación de relación", () => {
     const result = createRelation(emptyState([person, { ...person, name: "Destino" }]), draft);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.tables.at(-1)?.primaryKey).toHaveLength(2);
+  });
+
+  it("N:1 coloca la FK en el origen y conserva la orientación", () => {
+    const result = createRelation(emptyState([person, { ...person, name: "Destino" }]), {
+      source: "Persona",
+      target: "Destino",
+      participants: ["Persona", "Destino"],
+      participantMinimums: [0, 1],
+      participantMaximums: ["n", "1"],
+      name: "tiene",
+      kind: "N:1",
+      mandatory: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.tables[0].foreignKeys).toHaveLength(1);
+    expect(result.value.tables[1].foreignKeys).toHaveLength(0);
+    expect(result.value.tables[0].foreignKeys[0].relationKind).toBe("N:1");
+    expect(result.value.tables[0].foreignKeys[0].participantMaximums).toEqual(["n", "1"]);
+    expect(result.value.cardinalityMinimums["fk:persona:destino_id"]).toEqual([0, 1]);
+    const diagram = toDiagram({ tables: result.value.tables, warnings: [] }, []);
+    expect(diagram.relations[0].kind).toBe("N:1");
+    expect(diagram.relations[0].left).toBe("Persona");
+    expect(diagram.relations[0].right).toBe("Destino");
+  });
+
+  it("cambia N:1 a 1:N e intercambia los mínimos de participación", () => {
+    const created = createRelation(emptyState([person, { ...person, name: "Destino" }]), {
+      source: "Persona",
+      target: "Destino",
+      participants: ["Persona", "Destino"],
+      participantMinimums: [0, 1],
+      participantMaximums: ["n", "1"],
+      name: "tiene",
+      kind: "N:1",
+      mandatory: false,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const state = { ...emptyState([person, { ...person, name: "Destino" }]), ...created.value };
+    const diagram = toDiagram({ tables: state.tables, warnings: [] }, []);
+    const edited = editRelation(state, diagram.relations, diagram.relations[0].id, {
+      kind: "1:N",
+    });
+    expect(edited.ok).toBe(true);
+    if (!edited.ok) return;
+    expect(edited.value.tables?.[0].foreignKeys[0].relationKind).toBe("1:N");
+    expect(edited.value.tables?.[0].foreignKeys[0].participantMaximums).toEqual(["1", "n"]);
+    expect(edited.value.cardinalityMinimums?.[diagram.relations[0].id]).toEqual([1, 0]);
   });
 });

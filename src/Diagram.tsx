@@ -30,6 +30,7 @@ import {
 } from "./features/conceptual-diagram/geometry";
 import { orthogonalAttributeRoute } from "./features/conceptual-diagram/attributeRouting";
 import { calculateLayout } from "./features/conceptual-diagram/layout";
+import { hierarchyGeometry } from "./features/conceptual-diagram/hierarchyGeometry";
 import { exportSvgAsPdf } from "./features/export-pdf/exportSvgAsPdf";
 import {
   ConceptualEntityNode,
@@ -316,13 +317,14 @@ export function Diagram({
   const selectedHierarchyModel = hierarchies.find(
     (hierarchy) => hierarchy.id === selectedHierarchy,
   );
+  const relationOwnerIndex = (relation: Relation) => (relation.kind === "N:1" ? 0 : 1);
   const relationMinimum = (relation: Relation, index: number): 0 | 1 =>
     relation.weakCardinality
       ? index === 0
         ? 1
         : (Number(relation.weakCardinality[0]) as 0 | 1)
       : (cardinalityMinimums[relation.id]?.[index] ??
-        (relation.foreignKeyNullable && index === 1 ? 0 : 1));
+        (relation.foreignKeyNullable && index === relationOwnerIndex(relation) ? 0 : 1));
   const relationMaximum = (relation: Relation, index: number): "1" | "n" =>
     relation.participantMaximums?.[index] ??
     (relation.weakCardinality
@@ -337,7 +339,11 @@ export function Diagram({
           ? index === 0
             ? "1"
             : "n"
-          : "n");
+          : relation.kind === "N:1"
+            ? index === 0
+              ? "n"
+              : "1"
+            : "n");
   const updateRecursiveRole = (index: 0 | 1, value: string) => {
     if (!selectedRelationModel?.roles) return;
     const roles: [string, string] = [...selectedRelationModel.roles];
@@ -384,7 +390,11 @@ export function Diagram({
         i === index ? value : (current[id]?.[i] ?? 1),
       ),
     }));
-    if (index === 1 && selectedRelationModel?.kind !== "N:M")
+    if (
+      selectedRelationModel &&
+      index === relationOwnerIndex(selectedRelationModel) &&
+      selectedRelationModel.kind !== "N:M"
+    )
       editRelation(id, { mandatory: value === 1 });
   };
   const { move, start, finishRelation, startPan, endPointer, wheelZoom } =
@@ -407,15 +417,83 @@ export function Diagram({
   const availableEntities = entities
     .filter((entity) => !entity.associative)
     .map((entity) => entity.table.name);
+  const logicalRowsFor = (table: Entity["table"]) => {
+    const inheritedFrom = hierarchies.find((hierarchy) =>
+      hierarchy.subtypes.some((name) => sameName(name, table.name)),
+    )?.supertype;
+    const parentTable = inheritedFrom
+      ? logicalEntities.find((entity) => sameName(entity.table.name, inheritedFrom))?.table
+      : undefined;
+    const parentForeignKey = inheritedFrom
+      ? table.foreignKeys.find((foreignKey) => sameName(foreignKey.table, inheritedFrom))
+      : undefined;
+    const inheritedColumns = new Set(
+      (parentForeignKey?.columns ?? []).map((name) => name.toLowerCase()),
+    );
+    const inheritedRows =
+      inheritedFrom && parentTable
+        ? parentTable.primaryKey.map((parentKey, index) => {
+            const localName = parentForeignKey?.columns[index] ?? parentKey;
+            return {
+              key: `__hierarchy_${inheritedFrom}_${parentKey}`,
+              markers: "PK FK",
+              name: `${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
+            };
+          })
+        : [];
+    const ownRows = table.columns
+      .filter(
+        (column) =>
+          !inheritedColumns.has(column.name.toLowerCase()) &&
+          (!inheritedFrom || !column.primaryKey),
+      )
+      .map((column) => {
+        const isUnique =
+          column.unique ||
+          column.alternateKey ||
+          table.uniqueKeys.some((key) => key.some((name) => sameName(name, column.name)));
+        return {
+          key: column.name,
+          markers: [
+            column.primaryKey ? "PK" : "",
+            column.foreignKey ? "FK" : "",
+            isUnique && !column.primaryKey ? "UK" : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          name: column.name,
+        };
+      });
+    return {
+      inheritedFrom,
+      parentForeignKey,
+      inheritedRows,
+      ownRows,
+      logicalRows: [...inheritedRows, ...ownRows],
+    };
+  };
+  const logicalBoxHeight = (table: Entity["table"]) =>
+    40 + logicalRowsFor(table).logicalRows.length * 25;
   const saveHierarchy = () => {
     const subtypes = hierarchyDraft.subtypes.filter(Boolean);
     if (availableEntities.length < 3 || !hierarchyDraft.supertype || subtypes.length < 2) return;
-    setHierarchies((current) => [
-      ...current,
+    const nextHierarchies: Hierarchy[] = [
+      ...hierarchies,
       { id: "hierarchy-" + Date.now(), ...hierarchyDraft, subtypes },
-    ]);
+    ];
+    setHierarchies(nextHierarchies);
     setHierarchyOpen(false);
     setHierarchyDraft({ supertype: "", subtypes: [], exclusive: false, total: false });
+    // Reorganiza ambos modelos para que el supertipo quede sobre sus subtipos.
+    const conceptualLayout = calculateLayout(
+      entities.filter((entity) => !entity.associative),
+      model.relations,
+      nextHierarchies,
+    );
+    const logicalLayout = calculateLayout(logicalEntities, model.logicalRelations, nextHierarchies);
+    setPositions((current) => ({ ...current, ...conceptualLayout.positions }));
+    setLogicalPositions((current) => ({ ...current, ...logicalLayout.positions }));
+    setView(conceptual ? conceptualLayout.view : logicalLayout.view);
   };
   const saveRelation = () => {
     if (!relationDraft) return;
@@ -764,6 +842,7 @@ export function Diagram({
         setSelectedEntity={setSelectedEntity}
         setSelectedHierarchy={setSelectedHierarchy}
         relationMinimum={relationMinimum}
+        relationMaximum={relationMaximum}
         updateRecursiveRole={updateRecursiveRole}
         updateRelationMinimum={updateRelationMinimum}
       />
@@ -946,44 +1025,101 @@ export function Diagram({
             </>
           ) : (
             <>
-              {hierarchies.flatMap((hierarchy) =>
-                hierarchy.subtypes.map((subtypeName) => {
-                  const parent = getEntity(hierarchy.supertype, logicalEntities);
-                  const child = getEntity(subtypeName, logicalEntities);
-                  if (!parent || !child) return null;
-                  const dx = child.x - parent.x;
-                  const dy = child.y - parent.y;
-                  const length = Math.max(1, Math.hypot(dx, dy));
-                  const sx = parent.x + (dx / length) * 108;
-                  const sy = parent.y + (dy / length) * 24;
-                  const ex = child.x - (dx / length) * 108;
-                  const ey = child.y - (dy / length) * 24;
-                  return (
-                    <g key={`${hierarchy.id}:${subtypeName}`} className="hierarchy">
-                      <title>
-                        Implementación relacional: la clave primaria del subtipo también es clave
-                        foránea del supertipo (relación 1:1).
-                      </title>
+              {hierarchies.map((hierarchy) => {
+                const parent = getEntity(hierarchy.supertype, logicalEntities);
+                const children = hierarchy.subtypes
+                  .map((subtype) => getEntity(subtype, logicalEntities))
+                  .filter((entity): entity is Entity => Boolean(entity));
+                if (!parent || children.length < 2) return null;
+                const geometry = hierarchyGeometry(
+                  {
+                    x: parent.x,
+                    y: parent.y,
+                    halfWidth: 105,
+                    halfHeight: logicalBoxHeight(parent.table) / 2,
+                  },
+                  children.map((child) => ({
+                    x: child.x,
+                    y: child.y,
+                    halfWidth: 105,
+                    halfHeight: logicalBoxHeight(child.table) / 2,
+                  })),
+                );
+                if (!geometry) return null;
+                return (
+                  <g key={hierarchy.id} className="hierarchy">
+                    <title>
+                      Implementación relacional: la clave primaria del subtipo también es clave
+                      foránea del supertipo (relación 1:1).{" "}
+                      {hierarchy.exclusive ? "Jerarquía exclusiva." : "Jerarquía solapada."}{" "}
+                      {hierarchy.total ? "Cobertura total." : "Cobertura parcial."}
+                    </title>
+                    {hierarchy.total ? (
+                      geometry.doubleStem.map(([from, to], index) => (
+                        <line
+                          key={`logic-stem:${index}`}
+                          x1={from.x}
+                          y1={from.y}
+                          x2={to.x}
+                          y2={to.y}
+                          className="logic-edge hierarchy-total-stem"
+                        />
+                      ))
+                    ) : (
                       <line
-                        x1={sx}
-                        y1={sy}
-                        x2={ex}
-                        y2={ey}
+                        x1={geometry.stem[0].x}
+                        y1={geometry.stem[0].y}
+                        x2={geometry.stem[1].x}
+                        y2={geometry.stem[1].y}
                         className="logic-edge"
-                        markerEnd="url(#arrow)"
                       />
-                      <text
-                        x={(sx + ex) / 2}
-                        y={(sy + ey) / 2 - 8}
-                        textAnchor="middle"
-                        className="logic-cardinality"
-                      >
-                        1 : 1 · hereda
-                      </text>
-                    </g>
-                  );
-                }),
-              )}
+                    )}
+                    {geometry.childAnchors.map((anchor, index) => {
+                      const end = geometry.childLineEnds[index];
+                      return (
+                        <line
+                          key={`logic-child:${children[index].table.name}`}
+                          x1={anchor.x}
+                          y1={anchor.y}
+                          x2={end.x}
+                          y2={end.y}
+                          className="logic-edge"
+                          markerEnd="url(#arrow)"
+                        />
+                      );
+                    })}
+                    {hierarchy.exclusive && <path d={geometry.arc} className="hierarchy-arc" />}
+                    <circle
+                      cx={geometry.connector.x}
+                      cy={geometry.connector.y}
+                      r={geometry.radius + 8}
+                      className="hierarchy-hit"
+                    />
+                    <circle
+                      cx={geometry.connector.x}
+                      cy={geometry.connector.y}
+                      r={geometry.radius}
+                      className={hierarchy.total ? "hierarchy-circle total" : "hierarchy-circle"}
+                    />
+                    <text
+                      x={geometry.connector.x}
+                      y={geometry.connector.y + 3.4}
+                      textAnchor="middle"
+                      className={hierarchy.total ? "hierarchy-symbol total" : "hierarchy-symbol"}
+                    >
+                      {hierarchy.exclusive ? "d" : "o"}
+                    </text>
+                    <text
+                      x={geometry.connector.x}
+                      y={geometry.connector.y - geometry.radius - 10}
+                      textAnchor="middle"
+                      className="logic-cardinality"
+                    >
+                      1 : 1 · hereda PK
+                    </text>
+                  </g>
+                );
+              })}
               {model.logicalRelations.map((r) => {
                 const a = point(getEntity(r.left, logicalEntities), 0);
                 const b = point(getEntity(r.right, logicalEntities), 1);
@@ -1034,66 +1170,17 @@ export function Diagram({
                       markerEnd="url(#arrow)"
                     />
                     <text x={a.x + 107} y={a.y - 10} className="logic-cardinality">
-                      1
+                      {r.kind === "1:1" ? "1" : r.kind === "N:1" ? "*" : "1"}
                     </text>
                     <text x={b.x - 120} y={b.y - 10} className="logic-cardinality">
-                      *
+                      {r.kind === "1:1" ? "1" : r.kind === "N:1" ? "1" : "*"}
                     </text>
                   </g>
                 );
               })}
               {logicalEntities.map((e) => {
                 const { table } = e;
-                const inheritedFrom = hierarchies.find((h) =>
-                  h.subtypes.some((name) => sameName(name, table.name)),
-                )?.supertype;
-                const parentTable = inheritedFrom
-                  ? logicalEntities.find((entity) => sameName(entity.table.name, inheritedFrom))
-                      ?.table
-                  : undefined;
-                const parentForeignKey = inheritedFrom
-                  ? table.foreignKeys.find((fk) => sameName(fk.table, inheritedFrom))
-                  : undefined;
-                const inheritedColumns = new Set(
-                  (parentForeignKey?.columns ?? []).map((name) => name.toLowerCase()),
-                );
-                const inheritedRows =
-                  inheritedFrom && parentTable
-                    ? parentTable.primaryKey.map((parentKey, index) => {
-                        const localName = parentForeignKey?.columns[index] ?? parentKey;
-                        return {
-                          key: `__hierarchy_${inheritedFrom}_${parentKey}`,
-                          markers: "PK FK",
-                          name: `${localName}${parentForeignKey ? "" : ` → ${inheritedFrom}`}`,
-                        };
-                      })
-                    : [];
-                const ownRows = table.columns
-                  .filter(
-                    (column) =>
-                      !inheritedColumns.has(column.name.toLowerCase()) &&
-                      (!inheritedFrom || !column.primaryKey),
-                  )
-                  .map((column) => {
-                    const isUnique =
-                      column.unique ||
-                      column.alternateKey ||
-                      table.uniqueKeys.some((key) =>
-                        key.some((name) => sameName(name, column.name)),
-                      );
-                    return {
-                      key: column.name,
-                      markers: [
-                        column.primaryKey ? "PK" : "",
-                        column.foreignKey ? "FK" : "",
-                        isUnique && !column.primaryKey ? "UK" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" "),
-                      name: column.name,
-                    };
-                  });
-                const logicalRows = [...inheritedRows, ...ownRows];
+                const { logicalRows } = logicalRowsFor(table);
                 const h = 40 + logicalRows.length * 25;
                 return (
                   <g
@@ -1213,9 +1300,9 @@ export function Diagram({
             <b className="legend-relation">Ex / Id</b> dependencia existencial / identificativa
           </span>
           <small>
-            Jerarquías: triángulo sin arco = solapada; con arco = exclusiva. Círculo en el tallo =
-            total; sin círculo = parcial. El DDL no permite inferir dominios ni jerarquías: se
-            añaden desde el diseñador.
+            Jerarquías: círculo con «d» y arco (sonrisa) = exclusiva; «o» sin arco = solapada. Tallo
+            doble y círculo relleno = total; tallo simple = parcial. El DDL no permite inferir
+            dominios ni jerarquías: se añaden desde el diseñador.
           </small>
         </div>
       )}

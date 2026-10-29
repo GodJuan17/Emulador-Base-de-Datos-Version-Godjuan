@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { hierarchyGeometry } from "../hierarchyGeometry";
 
 type Props = {
   supertype: string;
@@ -30,9 +31,20 @@ export function HierarchyPreview({
     y: 222,
   }));
   const labels = Array.from({ length: slotCount }, (_, index) => subtypes[index] ?? "");
-  const arcStart = Math.max(50, points[0].x - 66);
-  const arcEnd = Math.min(550, points[points.length - 1].x + 66);
-  const arcPath = [`M${arcStart} 207`, "Q300 286", `${arcEnd} 207`].join(" ");
+  const geometry = hierarchyGeometry(
+    { x: 300, y: 54, halfWidth: 80, halfHeight: 26 },
+    points.map((point) => ({ x: point.x, y: point.y + 24, halfWidth: 66, halfHeight: 24 })),
+    { radius: 9, stemLength: 74 },
+  );
+  const childLabelPoint = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    return {
+      x: from.x + dx * 0.55 - (dy / length) * 12,
+      y: from.y + dy * 0.55 + (dx / length) * 12,
+    };
+  };
   const subtypeOptions = (index: number) =>
     availableEntities.filter(
       (name) => name !== supertype && (!subtypes.includes(name) || subtypes[index] === name),
@@ -47,6 +59,66 @@ export function HierarchyPreview({
         role="img"
         aria-label="Vista previa de jerarquía de generalización"
       >
+        {geometry && (
+          <>
+            {total ? (
+              geometry.doubleStem.map(([from, to], index) => (
+                <line
+                  key={`preview-stem:${index}`}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  className="draft-preview-edge"
+                />
+              ))
+            ) : (
+              <line
+                x1={geometry.stem[0].x}
+                y1={geometry.stem[0].y}
+                x2={geometry.stem[1].x}
+                y2={geometry.stem[1].y}
+                className="draft-preview-edge"
+              />
+            )}
+            {geometry.childAnchors.map((anchor, index) => {
+              const end = geometry.childLineEnds[index];
+              const label = childLabelPoint(anchor, end);
+              return (
+                <g key={`preview-child:${index}`}>
+                  <line
+                    x1={anchor.x}
+                    y1={anchor.y}
+                    x2={end.x}
+                    y2={end.y}
+                    className="draft-preview-edge"
+                  />
+                  <text x={label.x} y={label.y} textAnchor="middle" className="draft-preview-label">
+                    (0,1)
+                  </text>
+                </g>
+              );
+            })}
+            {exclusive && <path d={geometry.arc} className="hierarchy-arc" />}
+            <circle
+              cx={geometry.connector.x}
+              cy={geometry.connector.y}
+              r={geometry.radius}
+              className={total ? "hierarchy-circle total" : "hierarchy-circle"}
+            />
+            <text
+              x={geometry.connector.x}
+              y={geometry.connector.y + 3}
+              textAnchor="middle"
+              className={total ? "hierarchy-symbol total" : "hierarchy-symbol"}
+            >
+              {exclusive ? "d" : "o"}
+            </text>
+          </>
+        )}
+        <text x="318" y="105" className="draft-preview-label">
+          (1,1)
+        </text>
         <rect x="220" y="28" width="160" height="52" rx="4" className="draft-preview-entity" />
         <foreignObject x="220" y="28" width="160" height="52">
           <select
@@ -63,28 +135,8 @@ export function HierarchyPreview({
             ))}
           </select>
         </foreignObject>
-        <line x1="300" y1="80" x2="300" y2="126" className="draft-preview-edge" />
-        <text x="322" y="105" className="draft-preview-label">
-          (1,1)
-        </text>
-        <circle cx="300" cy="125" r="6" className="draft-preview-node outline" />
-        <path d="M270 144 L330 144 L300 180 Z" className="draft-preview-entity" />
         {points.map((point, index) => (
           <g key={index}>
-            <line
-              x1={
-                300 +
-                (index - (points.length - 1) / 2) *
-                  Math.min(34, 80 / Math.max(points.length - 1, 1))
-              }
-              y1="144"
-              x2={point.x}
-              y2="194"
-              className="draft-preview-edge"
-            />
-            <text x={point.x} y="187" textAnchor="middle" className="draft-preview-label">
-              (0,1)
-            </text>
             <rect
               x={point.x - 66}
               y={point.y}
@@ -110,8 +162,6 @@ export function HierarchyPreview({
             </foreignObject>
           </g>
         ))}
-        {exclusive && <path d={arcPath} className="hierarchy-arc" />}
-        {total && <circle cx="300" cy="124" r="9" className="hierarchy-total" />}
       </svg>
       <button
         type="button"

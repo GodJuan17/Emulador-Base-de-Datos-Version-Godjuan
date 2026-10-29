@@ -76,7 +76,7 @@ export function editRelation(
 ): Result<OperationChanges> {
   const relation = relations.find((item) => item.id === id);
   const match = parseForeignKeyRelationId(id);
-  if (!relation || !match || relation.kind === "N:M") {
+  if (!relation || !match || relation.kind === "N:M" || changes.kind === "N:M") {
     return failure("relation-not-editable", "La interrelación no se puede editar en este modelo.");
   }
   const owner = state.tables.find((table) => normalizeName(table.name) === match.owner);
@@ -135,16 +135,48 @@ function editBinaryCardinality(
   currentKind: RelationDraft["kind"],
   changes: RelationEdit,
 ): Result<OperationChanges> {
-  const uniqueKeys = owner.uniqueKeys.filter((item) => foreignKeyColumnsKey(item) !== key);
   const nextKind = changes.kind ?? currentKind;
+  const uniqueKeys = owner.uniqueKeys.filter((item) => foreignKeyColumnsKey(item) !== key);
   if (nextKind === "1:1") uniqueKeys.push(foreignKey.columns);
   const columns = owner.columns.map((column) =>
     foreignKey.columns.some((name) => sameName(name, column.name))
       ? { ...column, ...(changes.mandatory !== undefined ? { nullable: !changes.mandatory } : {}) }
       : column,
   );
+  const relationKey = `fk:${normalizeName(owner.name)}:${foreignKey.columns
+    .map(normalizeName)
+    .join(",")}`;
+  const currentMinimums = state.cardinalityMinimums[relationKey];
+  const currentOwnerFirst = currentKind === "N:1";
+  const nextOwnerFirst = nextKind === "N:1";
+  const flipped = currentOwnerFirst !== nextOwnerFirst;
+  const minimums =
+    currentMinimums && flipped ? [currentMinimums[1] ?? 1, currentMinimums[0] ?? 1] : undefined;
+  const nextForeignKey = {
+    ...foreignKey,
+    relationKind:
+      nextKind === "N:1"
+        ? ("N:1" as const)
+        : nextKind === "1:1"
+          ? ("1:1" as const)
+          : ("1:N" as const),
+    participantMaximums:
+      nextKind === "1:1"
+        ? (["1", "1"] as ("1" | "n")[])
+        : nextOwnerFirst
+          ? (["n", "1"] as ("1" | "n")[])
+          : (["1", "n"] as ("1" | "n")[]),
+  };
   return success({
-    tables: replaceTable(state.tables, owner.name, { ...owner, columns, uniqueKeys }),
+    tables: replaceTable(state.tables, owner.name, {
+      ...owner,
+      columns,
+      uniqueKeys,
+      foreignKeys: owner.foreignKeys.map((item) => (item === foreignKey ? nextForeignKey : item)),
+    }),
+    ...(minimums
+      ? { cardinalityMinimums: { ...state.cardinalityMinimums, [relationKey]: minimums } }
+      : {}),
   });
 }
 

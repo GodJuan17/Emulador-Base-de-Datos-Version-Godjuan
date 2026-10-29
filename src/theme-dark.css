@@ -341,14 +341,25 @@ html[data-theme="dark"] .hierarchy-edge {
   stroke: #6b95a3;
 }
 
-html[data-theme="dark"] .hierarchy-triangle,
-html[data-theme="dark"] .hierarchy-total {
+html[data-theme="dark"] .hierarchy-circle {
   fill: #132127;
   stroke: #6b95a3;
 }
 
+html[data-theme="dark"] .hierarchy-circle.total {
+  fill: #6b95a3;
+}
+
 html[data-theme="dark"] .hierarchy-arc {
   stroke: #6b95a3;
+}
+
+html[data-theme="dark"] .hierarchy-symbol {
+  fill: #dbe8ec;
+}
+
+html[data-theme="dark"] .hierarchy-symbol.total {
+  fill: #0b151a;
 }
 
 html[data-theme="dark"] .domain-oval {

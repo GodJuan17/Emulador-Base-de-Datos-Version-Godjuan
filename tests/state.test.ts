@@ -8,7 +8,7 @@ import {
   type StorageWriter,
 } from "../src/state/persistence";
 import { appReducer, createHistoryState } from "../src/state/reducer";
-import { generateDDL } from "../src/generateDDL";
+import { buildLogicalTables, generateDDL } from "../src/generateDDL";
 
 function fakeStorage(initial: Record<string, string> = {}): StorageWriter & {
   values: Record<string, string>;
@@ -188,5 +188,45 @@ describe("traducción de jerarquías a DDL", () => {
     ]);
     expect(ddl).toContain('"es_Alumno" BOOLEAN NOT NULL');
     expect(ddl).toContain('CHECK ("es_Alumno" OR "es_Docente")');
+  });
+
+  it("sustituye la PK propia del subtipo por la heredada sin perder el atributo", () => {
+    const withOwnKeys = tables.map((table) =>
+      table.name === "Alumno"
+        ? {
+            ...table,
+            columns: [
+              { name: "codigo", type: "INTEGER", nullable: false, primaryKey: true, unique: false },
+              { name: "programa", type: "TEXT", nullable: true, primaryKey: false, unique: false },
+            ],
+            primaryKey: ["codigo"],
+          }
+        : table,
+    );
+    const logical = buildLogicalTables(withOwnKeys, [
+      {
+        id: "hierarchy-3",
+        supertype: "Persona",
+        subtypes: ["Alumno", "Docente"],
+        exclusive: true,
+        total: true,
+      },
+    ]);
+    const alumno = logical.find((table) => table.name === "Alumno");
+    expect(alumno?.primaryKey).toEqual(["id"]);
+    expect(alumno?.columns.find((column) => column.name === "codigo")?.primaryKey).toBe(false);
+    expect(alumno?.columns.find((column) => column.name === "id")?.primaryKey).toBe(true);
+    expect(alumno?.foreignKeys[0].table).toBe("Persona");
+    expect(
+      generateDDL(withOwnKeys, [
+        {
+          id: "hierarchy-3",
+          supertype: "Persona",
+          subtypes: ["Alumno", "Docente"],
+          exclusive: true,
+          total: true,
+        },
+      ]),
+    ).toContain("codigo INTEGER NOT NULL");
   });
 });
